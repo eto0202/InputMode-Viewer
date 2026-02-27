@@ -1,5 +1,5 @@
 [package]
-name = "InputMode-Viewer"
+name = "input_mode-viewer"
 version = "0.1.0"
 edition = "2024"
 
