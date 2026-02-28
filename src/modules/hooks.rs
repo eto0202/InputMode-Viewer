@@ -1,5 +1,4 @@
 use crate::modules::*;
-use std::error::Error;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::OnceLock;
