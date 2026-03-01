@@ -1,4 +1,4 @@
-use crate::modules::*;
+use crate::*;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -75,9 +75,9 @@ fn send_event() {
     }
 }
 
-pub fn event_loop() -> Receiver<hooks::AppEvent> {
+pub fn event_loop() -> Receiver<sys::hooks::AppEvent> {
     // チャンネル作成
-    let (tx, rx) = channel::<hooks::AppEvent>();
+    let (tx, rx) = channel::<sys::hooks::AppEvent>();
 
     // 送信機をセット
     EVENT_SENDER.set(Mutex::new(tx)).ok();

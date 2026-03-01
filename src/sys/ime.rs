@@ -1,13 +1,13 @@
-use crate::modules::*;
+use crate::*;
 use std::sync::mpsc;
 use std::time::Duration;
 use windows::Win32::System::Com::*;
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::*;
 
-pub fn ime_event_loop(tx: mpsc::Sender<String>) -> windows::core::Result<()> {
+pub fn ime_event(tx: mpsc::Sender<String>) -> windows::core::Result<()> {
     unsafe {
-        let rx = hooks::event_loop();
+        let rx = sys::hooks::event_loop();
         // 初期化処理
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
         let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL)?;
@@ -41,7 +41,7 @@ pub fn ime_event_loop(tx: mpsc::Sender<String>) -> windows::core::Result<()> {
             // 下の行へ
 
             match event {
-                Ok(hooks::AppEvent::CheckRequest) => {
+                Ok(sys::hooks::AppEvent::CheckRequest) => {
                     // println!("Active Window Changed - IME Check");
                 }
                 Err(_) => {}
@@ -56,17 +56,17 @@ pub fn ime_event_loop(tx: mpsc::Sender<String>) -> windows::core::Result<()> {
 
             // キャッシュがある場合
             if let Some(ref tray) = cached_tray {
-                match utils::find_ime_char_recursive(&walker, tray) {
+                match sys::utils::find_ime_char(&walker, tray) {
                     Some(current_glyph) => {
                         let char_code = current_glyph.chars().next().unwrap_or_default();
-                        let (is_ime_active, input_mode) = utils::get_ime_status(char_code);
+                        let (is_ime_active, input_mode) = sys::utils::get_ime_status(char_code);
                         // 判定結果
-                        let has_input_capability = input_capability::text_input_capability(&uia);
+                        let has_input_capability = sys::input::input_capability(&uia);
 
                         let should_show = match has_input_capability {
-                            input_capability::InputCapability::Yes => true, // 入力欄ならIME状態問わず表示
-                            input_capability::InputCapability::No => false, // 入力不可なら絶対に出さない
-                            input_capability::InputCapability::Unknown => is_ime_active, // 判別不能ならONの時だけ救済表示
+                            sys::input::InputCapability::Yes => true, // 入力欄ならIME状態問わず表示
+                            sys::input::InputCapability::No => false, // 入力不可なら絶対に出さない
+                            sys::input::InputCapability::Unknown => is_ime_active, // 判別不能ならONの時だけ救済表示
                         };
 
                         if should_show {

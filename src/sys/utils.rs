@@ -1,7 +1,7 @@
 use windows::Win32::UI::Accessibility::*;
 
 // RawViewWalkerを使って子孫を走査し、条件に合う要素の名前を返す
-pub fn find_ime_char_recursive(
+pub fn find_ime_char(
     walker: &IUIAutomationTreeWalker,
     element: &IUIAutomationElement,
 ) -> Option<String> {
@@ -30,7 +30,7 @@ pub fn find_ime_char_recursive(
         // 子要素
         if let Ok(mut child) = walker.GetFirstChildElement(element) {
             loop {
-                if let Some(res) = find_ime_char_recursive(walker, &child) {
+                if let Some(res) = find_ime_char(walker, &child) {
                     return Some(res);
                 }
                 // 次の兄弟要素

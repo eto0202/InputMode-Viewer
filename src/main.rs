@@ -1,16 +1,16 @@
 use gpui::*;
 use gpui_component_assets::*;
-use input_mode_viewer::modules::*;
+use input_mode_viewer::*;
 
 // TODO:
 // モードの表示は入力状態移行時と、無操作状態が指定秒数経過後のみ。
 // ウィンドウの切り替えだけでなく、要素を選択した時にも状態更新
 
 fn main() {
-    let app = Application::new().with_assets(Assets);
+    let application = Application::new().with_assets(Assets);
 
-    app.run(move |app_cx| {
-        gpui_component::init(app_cx);
+    application.run(move |app| {
+        gpui_component::init(app);
 
         // メインウィンドウを画面端にサイズ0で表示してユーザーから見えないように
         let controller_options = WindowOptions {
@@ -25,10 +25,9 @@ fn main() {
             ..Default::default()
         };
 
-        app_cx
-            .open_window(controller_options, |_, app_cx| {
-                app_cx.new(controller::Controller::new)
-            })
-            .unwrap();
+        app.open_window(controller_options, |_, app| {
+            app.new(app::controller::Controller::new)
+        })
+        .unwrap();
     });
 }

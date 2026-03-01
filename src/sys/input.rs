@@ -14,12 +14,12 @@ pub enum InputCapability {
 }
 
 // 外部ウィンドウのテキスト入力可能性を確認
-pub fn text_input_capability(uia: &IUIAutomation) -> InputCapability {
+pub fn input_capability(uia: &IUIAutomation) -> InputCapability {
     unsafe {
         // フォーカス要素の取得
         let Ok(focused_element) = uia.GetFocusedElement() else {
             println!("フォーカス要素の取得に失敗");
-            return check_win32_input_capability();
+            return win32_input_capability();
         };
         // println!("フォーカス要素: {:?}", focused_element);
         // 要素が無効化されていないかチェック
@@ -75,7 +75,7 @@ pub fn text_input_capability(uia: &IUIAutomation) -> InputCapability {
 
         // 判別不可能な場合
         println!("UIA 判別不可能");
-        check_win32_input_capability()
+        win32_input_capability()
     }
 }
 
@@ -120,7 +120,7 @@ fn is_read_only(element: &IUIAutomationElement) -> bool {
 }
 
 // UIAで判定できない場合
-fn check_win32_input_capability() -> InputCapability {
+fn win32_input_capability() -> InputCapability {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd.0.is_null() {
