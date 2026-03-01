@@ -1,3 +1,4 @@
+use crate::sys::config::*;
 use crate::*;
 use gpui::*;
 use std::sync::mpsc;
@@ -13,9 +14,9 @@ impl Controller {
         let tray_icon = app::tray::create_tray_icon();
 
         // 1. 文字列をやり取りするチャネルを作成
-        let (tx, rx) = mpsc::channel::<String>();
+        let (tx, rx) = mpsc::channel::<InputMode>();
 
-        open_main_window(cx, "".to_string());
+        open_main_window(cx, InputMode::Unknown);
 
         // OSスレッドに写したことで、recv_timeoutが描画処理を止めない
         thread::spawn(move || {
@@ -28,11 +29,12 @@ impl Controller {
         cx.spawn(async move |_, async_app| {
             let async_app = async_app.clone();
             loop {
-                while let Ok(new_text) = rx.try_recv() {
-                    if new_text.is_empty() {
+                while let Ok(input_mode) = rx.try_recv() {
+                    // 入力モードが不明の場合は非表示
+                    if input_mode == InputMode::Unknown {
                         Self::handle_close_window(&async_app);
                     } else {
-                        Self::handle_update_window(&async_app, new_text);
+                        Self::handle_update_window(&async_app, input_mode);
                     }
                 }
                 async_app
@@ -55,7 +57,7 @@ impl Controller {
         }
     }
 
-    fn handle_update_window(async_app: &AsyncApp, new_text: String) {
+    fn handle_update_window(async_app: &AsyncApp, input_mode: InputMode) {
         async_app
             .update(|app| {
                 // 更新対象のハンドルを特定
@@ -69,8 +71,8 @@ impl Controller {
                     handle
                         .update(app, |view, window, cx| {
                             // テキスト更新
-                            if view.text != new_text {
-                                view.text = new_text.clone();
+                            if view.input_mode != input_mode {
+                                view.input_mode = input_mode;
                                 // 更新のたびにカウントアップ
                                 view.display_id += 1;
                                 cx.notify();
@@ -83,7 +85,7 @@ impl Controller {
                             cx.spawn(async move |_, async_app| {
                                 async_app
                                     .background_executor()
-                                    .timer(Duration::from_secs(2))
+                                    .timer(Duration::from_secs(4))
                                     .await;
 
                                 handle.update(async_app, |view, window, _| {
@@ -97,7 +99,7 @@ impl Controller {
                         })
                         .ok();
                 } else {
-                    open_main_window(app, new_text);
+                    open_main_window(app, input_mode);
                 }
             })
             .ok();
@@ -131,7 +133,7 @@ impl Render for Controller {
     }
 }
 
-fn open_main_window(app: &mut App, text: String) {
+fn open_main_window(app: &mut App, input_mode: InputMode) {
     let window_options = WindowOptions {
         kind: WindowKind::PopUp,
         titlebar: None,
@@ -144,7 +146,7 @@ fn open_main_window(app: &mut App, text: String) {
     };
 
     let handle_ref = app.open_window(window_options, |window, app| {
-        app.new(|cx| ui::window::MainWindow::new(text, window, cx))
+        app.new(|cx| ui::window::MainWindow::new(input_mode, window, cx))
     });
 
     if let Ok(window_handle) = handle_ref {

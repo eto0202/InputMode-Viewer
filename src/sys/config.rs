@@ -1,0 +1,57 @@
+pub const GLYPH_HIRAGANA: &'static str = "\u{e986}";
+pub const GLYPH_HALF_ALPHA_1: &'static str = "\u{e97e}";
+pub const GLYPH_HALF_ALPHA_2: &'static str = "\u{e982}";
+pub const GLYPH_FULL_KATAKANA: &'static str = "\u{e987}";
+pub const GLYPH_FULL_ALPHA: &'static str = "\u{e981}";
+pub const GLYPH_HALF_KATAKANA: &'static str = "\u{e988}";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Unknown,
+    Hiragana,
+    HalfAlpha,
+    FullKatakana,
+    FullAlpha,
+    HalfKatakana,
+}
+
+impl InputMode {
+    pub fn new() -> Self {
+        InputMode::Unknown
+    }
+
+    // グリフからImeModeを取得
+    pub fn from_glyph(glyph: &String) -> Option<Self> {
+        match glyph.as_str() {
+            GLYPH_HIRAGANA => Some(Self::Hiragana),
+            GLYPH_FULL_KATAKANA => Some(Self::FullKatakana),
+            GLYPH_FULL_ALPHA => Some(Self::FullAlpha),
+            GLYPH_HALF_KATAKANA => Some(Self::HalfKatakana),
+
+            GLYPH_HALF_ALPHA_1 | GLYPH_HALF_ALPHA_2 => Some(Self::HalfAlpha),
+
+            // 他のアイコン（Wi-Fi等）は無視
+            _ => {
+                println!("None");
+                None
+            }
+        }
+    }
+
+    // 表示用テキストを取得
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Hiragana => "ひらがな (あ)",
+            Self::HalfAlpha => "半角英数 (A)",
+            Self::FullKatakana => "全角カタカナ (カ)",
+            Self::FullAlpha => "全角英数 (Ａ)",
+            Self::HalfKatakana => "半角カタカナ (ｶ)",
+            Self::Unknown => "",
+        }
+    }
+
+    /// IMEがONかどうか
+    pub fn is_on(&self) -> bool {
+        !matches!(self, Self::HalfAlpha)
+    }
+}

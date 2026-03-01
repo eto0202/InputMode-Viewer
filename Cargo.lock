@@ -3230,6 +3230,7 @@ dependencies = [
  "raw-window-handle",
  "tray-icon",
  "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

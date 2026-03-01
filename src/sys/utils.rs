@@ -1,5 +1,7 @@
 use windows::Win32::UI::Accessibility::*;
 
+use crate::sys::config::InputMode;
+
 // RawViewWalkerを使って子孫を走査し、条件に合う要素の名前を返す
 pub fn find_ime_char(
     walker: &IUIAutomationTreeWalker,
@@ -44,9 +46,57 @@ pub fn find_ime_char(
     }
 }
 
-// グリフの文字コードから、IMEがONか,表示用文字列のタプルを返す
-pub fn get_ime_status(char_code: char) -> (bool, &'static str) {
-    match char_code as u32 {
+// あらかじめ情報をキャッシュに乗せることで、find_ime_char内での通信コストをゼロに
+pub fn create_ime_cache_request(
+    uia: &IUIAutomation,
+) -> windows::core::Result<IUIAutomationCacheRequest> {
+    unsafe {
+        let cache_request = uia.CreateCacheRequest()?;
+
+        // RawViewに設定し、すべての要素を無視せず表示
+        // これを設定しないとInnerTextBlockが無視される
+        cache_request.SetTreeFilter(&uia.RawViewCondition()?)?;
+
+        // 取得したいプロパティ
+        cache_request.AddProperty(UIA_NamePropertyId)?;
+        cache_request.AddProperty(UIA_AutomationIdPropertyId)?;
+        cache_request.AddProperty(UIA_IsOffscreenPropertyId)?;
+
+        // 検索範囲
+        cache_request.SetTreeScope(TreeScope_Element)?;
+
+        Ok(cache_request)
+    }
+}
+
+// キャッシュされたUIA要素リストから指定のIDのNameプロパティを取得
+pub fn find_id(array: IUIAutomationElementArray, target_id: &'static str) -> InputMode {
+    unsafe {
+        (0..array.Length().unwrap_or(0))
+            .filter_map(|i| array.GetElement(i).ok())
+            .find_map(|el| {
+                // IDチェック
+                let id = el.CachedAutomationId().ok()?.to_string();
+                if id != target_id {
+                    return None;
+                }
+                // 表示状態チェック
+                let is_visible = !el.CachedIsOffscreen().ok()?.as_bool();
+                if !is_visible {
+                    return None;
+                }
+                // グリフを取得し、InputModeに変換
+                let glyph = el.CachedName().ok()?.to_string();
+                InputMode::from_glyph(&glyph)
+            })
+            .unwrap_or(InputMode::Unknown)
+    }
+}
+
+// グリフの文字コードから、IMEがONか表示用文字列のタプルを返す
+pub fn get_ime_status(char_code: &String) -> (bool, &'static str) {
+    let code = char_code.chars().next().unwrap_or_default();
+    match code as u32 {
         0xE986 => (true, "ひらがな (あ)"),
         0xE987 => (true, "全角カタカナ (カ)"),
         0xE981 => (true, "全角英数 (Ａ)"),
