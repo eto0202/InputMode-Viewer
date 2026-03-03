@@ -1,4 +1,4 @@
-use crate::sys::config::*;
+use crate::sys::uia::input_mode::*;
 use gpui::*;
 
 pub struct MainWindow {

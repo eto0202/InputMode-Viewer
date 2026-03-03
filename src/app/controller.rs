@@ -1,45 +1,90 @@
-use crate::sys::config::*;
+use crate::sys::hooks::AppEvent;
+use crate::sys::input::*;
+use crate::sys::uia::input_mode::*;
+use crate::sys::uia::*;
+use crate::sys::*;
 use crate::*;
 use gpui::*;
 use std::sync::mpsc;
-use std::{thread, time::Duration};
+use std::thread;
+use std::time::Duration;
 use tray_icon::TrayIcon;
+
+pub enum Message {
+    Mode(InputMode),
+    Cap(InputCapability),
+}
 
 pub struct Controller {
     _tray_icon: TrayIcon,
 }
 
 impl Controller {
+    #[allow(unused_assignments)]
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let tray_icon = app::tray::create_tray_icon();
+        // チャンネル作成
+        let (tx, rx) = mpsc::channel::<Message>();
+        let (tx_uia, rx_uia) = mpsc::channel::<AppEvent>();
+        let (tx_input, rx_input) = mpsc::channel::<AppEvent>();
 
-        // 1. 文字列をやり取りするチャネルを作成
-        let (tx, rx) = mpsc::channel::<InputMode>();
+        // OSイベント
+        let rx_hooks = hooks::win_hooks();
 
-        open_main_window(cx, InputMode::Unknown);
-
-        // OSスレッドに写したことで、recv_timeoutが描画処理を止めない
+        // ディスパッチャー
         thread::spawn(move || {
-            if let Err(e) = sys::ime::ime_event(tx) {
-                eprintln!("ime_event Error: {:?}", e);
+            while let Ok(event) = rx_hooks.recv() {
+                let _ = tx_uia.send(event.clone());
+                let _ = tx_input.send(event.clone());
             }
         });
+
+        // ワーカー
+        let _uia_handle = uia::uia_event::uia_thread(tx.clone(), rx_uia);
+        let _input_handle = input::input_thread(tx.clone(), rx_input);
 
         // GUI更新
         cx.spawn(async move |_, async_app| {
             let async_app = async_app.clone();
+
+            // 最新の状態を保持する変数
+            let mut last_mode = InputMode::Unknown;
+            let mut last_cap = InputCapability::Unknown;
+
             loop {
-                while let Ok(input_mode) = rx.try_recv() {
-                    // 入力モードが不明の場合は非表示
-                    if input_mode == InputMode::Unknown {
-                        Self::handle_close_window(&async_app);
-                    } else {
-                        Self::handle_update_window(&async_app, input_mode);
+                let mut has_new_msg = false;
+                // メッセージを処理
+                while let Ok(msg) = rx.try_recv() {
+                    match msg {
+                        Message::Mode(mode) => {
+                            last_mode = mode;
+                            has_new_msg = true;
+                        }
+                        Message::Cap(cap) => {
+                            last_cap = cap;
+                            has_new_msg = true;
+                        }
                     }
                 }
+
+                // 新しい情報が届いた場合のみ判定
+                if has_new_msg {
+                    let should_show = match last_cap {
+                        InputCapability::No => false,
+                        InputCapability::Yes => last_mode != InputMode::Unknown,
+                        InputCapability::Unknown => last_mode.is_on(),
+                    };
+
+                    // 描画更新
+                    if should_show {
+                        Self::handle_update_window(&async_app, last_mode);
+                    } else {
+                        Self::handle_close_window(&async_app);
+                    }
+                }
+
                 async_app
                     .background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(std::time::Duration::from_millis(50))
                     .await;
             }
         })
@@ -53,7 +98,7 @@ impl Controller {
         .detach();
 
         Self {
-            _tray_icon: tray_icon,
+            _tray_icon: app::tray::create_tray_icon(),
         }
     }
 
@@ -79,23 +124,6 @@ impl Controller {
                             }
                             sys::win32::set_window_position(window);
                             sys::win32::set_window_visibility(window, true);
-
-                            // 自動消去タスク
-                            let current_id = view.display_id;
-                            cx.spawn(async move |_, async_app| {
-                                async_app
-                                    .background_executor()
-                                    .timer(Duration::from_secs(4))
-                                    .await;
-
-                                handle.update(async_app, |view, window, _| {
-                                    // 待機中にIDが変わっていなければ、ユーザーは沈黙していると判断
-                                    if view.display_id == current_id {
-                                        sys::win32::set_window_visibility(window, false);
-                                    }
-                                })
-                            })
-                            .detach();
                         })
                         .ok();
                 } else {

@@ -21,19 +21,19 @@ impl InputMode {
     }
 
     // グリフからImeModeを取得
-    pub fn from_glyph(glyph: &String) -> Option<Self> {
+    pub fn from_glyph(glyph: String) -> Self {
         match glyph.as_str() {
-            GLYPH_HIRAGANA => Some(Self::Hiragana),
-            GLYPH_FULL_KATAKANA => Some(Self::FullKatakana),
-            GLYPH_FULL_ALPHA => Some(Self::FullAlpha),
-            GLYPH_HALF_KATAKANA => Some(Self::HalfKatakana),
+            GLYPH_HIRAGANA => Self::Hiragana,
+            GLYPH_FULL_KATAKANA => Self::FullKatakana,
+            GLYPH_FULL_ALPHA => Self::FullAlpha,
+            GLYPH_HALF_KATAKANA => Self::HalfKatakana,
 
-            GLYPH_HALF_ALPHA_1 | GLYPH_HALF_ALPHA_2 => Some(Self::HalfAlpha),
+            GLYPH_HALF_ALPHA_1 | GLYPH_HALF_ALPHA_2 => Self::HalfAlpha,
 
             // 他のアイコン（Wi-Fi等）は無視
             _ => {
-                println!("None");
-                None
+                println!("Unknown IME Glyph detected: {:?}", glyph);
+                Self::Unknown
             }
         }
     }

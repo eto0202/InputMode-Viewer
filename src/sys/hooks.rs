@@ -1,8 +1,7 @@
-use crate::*;
-use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::OnceLock;
-use std::sync::mpsc::*;
+use std::sync::mpsc::Sender;
+use std::sync::*;
 use std::thread;
 use windows::Win32::Foundation::HINSTANCE;
 use windows::Win32::Foundation::HWND;
@@ -17,6 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 // コールバック関数からメインスレッドへ合図を送るため
 static EVENT_SENDER: OnceLock<Mutex<Sender<AppEvent>>> = OnceLock::new();
 
+#[derive(Debug, Clone)]
 pub enum AppEvent {
     CheckRequest,
 }
@@ -75,12 +75,12 @@ fn send_event() {
     }
 }
 
-pub fn event_loop() -> Receiver<sys::hooks::AppEvent> {
+pub fn win_hooks() -> mpsc::Receiver<AppEvent> {
     // チャンネル作成
-    let (tx, rx) = channel::<sys::hooks::AppEvent>();
+    let (tx, rx) = mpsc::channel::<AppEvent>();
 
     // 送信機をセット
-    EVENT_SENDER.set(Mutex::new(tx)).ok();
+    EVENT_SENDER.set(Mutex::new(tx)).unwrap();
 
     // フック監視用の別スレッドを機動
     thread::spawn(|| unsafe {
@@ -98,18 +98,14 @@ pub fn event_loop() -> Receiver<sys::hooks::AppEvent> {
         let kbd_hook = SetWindowsHookExW(
             WH_KEYBOARD_LL,
             Some(keyboard_proc),
-            Some(HINSTANCE(0 as *mut c_void)),
+            Some(HINSTANCE::default()),
             0,
         )
         .unwrap();
         // クリックフック
-        let mouse_hook = SetWindowsHookExW(
-            WH_MOUSE_LL,
-            Some(mouse_proc),
-            Some(HINSTANCE(0 as *mut c_void)),
-            0,
-        )
-        .unwrap();
+        let mouse_hook =
+            SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(HINSTANCE::default()), 0)
+                .unwrap();
 
         // メッセージループ
         let mut msg = MSG::default();

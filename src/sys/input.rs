@@ -1,3 +1,8 @@
+use crate::app::controller::Message;
+use crate::sys::hooks::AppEvent;
+use std::sync::mpsc;
+use std::thread;
+use windows::Win32::System::Com::*;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::Ime::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -13,19 +18,44 @@ pub enum InputCapability {
     Unknown,
 }
 
+pub fn input_thread(
+    tx: mpsc::Sender<Message>,
+    rx: mpsc::Receiver<AppEvent>,
+) {
+
+    thread::spawn(move || unsafe {
+        // COMの初期化
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        // uia取得
+        let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL).unwrap();
+
+        // hooksからの通知を待機
+        loop {
+            println!("--- input_thread ---");
+            let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+
+            match event {
+                Ok(AppEvent::CheckRequest) => {
+                    tx.send(Message::Cap(input_capability(&uia))).unwrap()
+                }
+                Err(_) => {}
+            }
+        }
+    });
+}
+
 // 外部ウィンドウのテキスト入力可能性を確認
-pub fn input_capability(uia: &IUIAutomation) -> InputCapability {
+fn input_capability(uia: &IUIAutomation) -> InputCapability {
     unsafe {
+        println!("--- Input_capability check ---");
         // フォーカス要素の取得
         let Ok(focused_element) = uia.GetFocusedElement() else {
-            println!("フォーカス要素の取得に失敗");
             return win32_input_capability();
         };
         // println!("フォーカス要素: {:?}", focused_element);
         // 要素が無効化されていないかチェック
         if let Ok(enabled) = focused_element.CurrentIsEnabled() {
             if !enabled.as_bool() {
-                println!("要素が無効化されている");
                 return InputCapability::No;
             }
         }
@@ -41,14 +71,11 @@ pub fn input_capability(uia: &IUIAutomation) -> InputCapability {
             }
             return InputCapability::No;
         }
-        println!("TextPatternかTextEditPatternが存在しない");
 
         // ControlTypeのチェック
         let Ok(control_type) = focused_element.CurrentControlType() else {
-            println!("ControlTypeが見つからない");
             return InputCapability::No;
         };
-        println!("ControlType: {:?}", control_type);
 
         #[allow(non_upper_case_globals)]
         match control_type {
@@ -114,7 +141,7 @@ fn is_read_only(element: &IUIAutomationElement) -> bool {
                 }
             }
         }
-        println!("GetCurrentPatternが存在しない");
+
         false
     }
 }
