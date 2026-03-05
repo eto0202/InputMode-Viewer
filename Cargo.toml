@@ -11,7 +11,6 @@ image = "0.25.9"
 rand = "0.9.2"
 raw-window-handle = "0.6.2"
 tray-icon = "0.21.3"
-windows-core = "0.62.2"
 windows = { version = "0.62.2", features = [
     "Win32",
     "Win32_UI_Controls",

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::mpsc::Sender;
@@ -11,6 +12,19 @@ use windows::Win32::Foundation::WPARAM;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+
+// Dropガード
+struct HookGuard(HWINEVENTHOOK, HHOOK, HHOOK);
+impl Drop for HookGuard {
+    fn drop(&mut self) {
+        println!("Unhook drop");
+        unsafe {
+            let _ = UnhookWinEvent(self.0);
+            let _ = UnhookWindowsHookEx(self.1);
+            let _ = UnhookWindowsHookEx(self.2);
+        }
+    }
+}
 
 // グローバルな送信機
 // コールバック関数からメインスレッドへ合図を送るため
@@ -40,7 +54,7 @@ unsafe extern "system" fn win_event_proc(
 // キー入力フック
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
-        if n_code >= 0 && w_param.0 == WM_KEYDOWN as usize {
+        if n_code >= 0 && w_param.0 == WM_KEYUP as usize {
             let kbd = &*(l_param.0 as *const KBDLLHOOKSTRUCT);
 
             match VIRTUAL_KEY(kbd.vkCode as u16) {
@@ -59,7 +73,7 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
 // クリックイベント
 unsafe extern "system" fn mouse_proc(ncode: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
-        if ncode >= 0 && w_param.0 == WM_LBUTTONDOWN as usize {
+        if ncode >= 0 && w_param.0 == WM_LBUTTONUP as usize {
             send_event();
         }
         CallNextHookEx(None, ncode, w_param, l_param)
@@ -83,40 +97,39 @@ pub fn win_hooks() -> mpsc::Receiver<AppEvent> {
     EVENT_SENDER.set(Mutex::new(tx)).unwrap();
 
     // フック監視用の別スレッドを機動
-    thread::spawn(|| unsafe {
-        // ウィンドウフック
-        let win_hook = SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND,
-            None,
-            Some(win_event_proc), // コールバック関数を指定
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT, // 外部プロセスとして監視
-        );
-        // キー入力フック
-        let kbd_hook = SetWindowsHookExW(
-            WH_KEYBOARD_LL,
-            Some(keyboard_proc),
-            Some(HINSTANCE::default()),
-            0,
-        )
-        .unwrap();
-        // クリックフック
-        let mouse_hook =
-            SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(HINSTANCE::default()), 0)
-                .unwrap();
+    thread::spawn(|| -> Result<()> {
+        unsafe {
+            // ウィンドウフック
+            let win_hook = SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
+                None,
+                Some(win_event_proc), // コールバック関数を指定
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT, // 外部プロセスとして監視
+            );
+            // キー入力フック
+            let kbd_hook = SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                Some(keyboard_proc),
+                Some(HINSTANCE::default()),
+                0,
+            )?;
+            // クリックフック
+            let mouse_hook =
+                SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(HINSTANCE::default()), 0)?;
 
-        // メッセージループ
-        let mut msg = MSG::default();
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            DispatchMessageW(&msg);
+            let _guard = HookGuard(win_hook, kbd_hook, mouse_hook);
+
+            // メッセージループ
+            let mut msg = MSG::default();
+            // 0 (false) -1 (エラー) それ以外 (true)
+            while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
+                DispatchMessageW(&msg);
+            }
         }
-
-        let _ = UnhookWinEvent(win_hook);
-        let _ = UnhookWindowsHookEx(kbd_hook);
-        let _ = UnhookWindowsHookEx(mouse_hook);
+        Ok(())
     });
-
     rx
 }

@@ -14,10 +14,17 @@ pub fn create_ime_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCach
         cache_request.SetTreeFilter(&uia.RawViewCondition()?)?;
 
         // 取得したいプロパティ
+        // UIA探索用
         cache_request.AddProperty(UIA_NamePropertyId)?;
         cache_request.AddProperty(UIA_AutomationIdPropertyId)?;
         cache_request.AddProperty(UIA_IsOffscreenPropertyId)?;
         cache_request.AddProperty(UIA_RuntimeIdPropertyId)?;
+        // 入力判定用
+        cache_request.AddProperty(UIA_IsEnabledPropertyId)?;
+        cache_request.AddProperty(UIA_ControlTypePropertyId)?;
+        cache_request.AddPattern(UIA_TextPatternId)?;
+        cache_request.AddPattern(UIA_TextEditPatternId)?;
+        cache_request.AddPattern(UIA_ValuePatternId)?;
 
         // 検索範囲
         cache_request.SetTreeScope(TreeScope_Element)?;
@@ -28,7 +35,7 @@ pub fn create_ime_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCach
 
 // キャッシュされたUIA要素リストから指定のIDのIUIAutomationElementを取得
 pub fn find_element(
-    array: IUIAutomationElementArray,
+    array: &IUIAutomationElementArray,
     target_id: &'static str,
 ) -> Option<IUIAutomationElement> {
     unsafe {

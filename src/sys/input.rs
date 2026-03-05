@@ -1,5 +1,6 @@
 use crate::app::controller::Message;
 use crate::sys::hooks::AppEvent;
+use anyhow::Result;
 use std::sync::mpsc;
 use std::thread;
 use windows::Win32::System::Com::*;
@@ -8,101 +9,144 @@ use windows::Win32::UI::Input::Ime::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::Interface;
 
-#[derive(Debug, PartialEq, Eq)]
+// スレッドを抜ける時に自動でCoUninitializeを呼ぶためのガード
+struct ComGuard;
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        println!("input COM drop");
+        unsafe {
+            CoUninitialize();
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum InputCapability {
     // 入力欄である(UIAで確認済み、またはキャレットがある)
     Yes,
     // 入力欄ではない(ボタン、背景、読み取り専用など)
     No,
     // 判別不能
+    #[default]
     Unknown,
 }
 
-pub fn input_thread(
-    tx: mpsc::Sender<Message>,
-    rx: mpsc::Receiver<AppEvent>,
-) {
+pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
+    thread::spawn(move || -> Result<()> {
+        unsafe {
+            // COMの初期化
+            CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
 
-    thread::spawn(move || unsafe {
-        // COMの初期化
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        // uia取得
-        let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL).unwrap();
+            let _guard = ComGuard;
 
-        // hooksからの通知を待機
-        loop {
-            println!("--- input_thread ---");
-            let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+            // uia取得
+            let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL)?;
+            // キャッシュリクエスト
+            let cache = uia.CreateCacheRequest()?;
+            // RawViewに設定し、すべての要素を無視せず表示
+            // これを設定しないとInnerTextBlockが無視される
+            cache.SetTreeFilter(&uia.RawViewCondition()?)?;
 
-            match event {
-                Ok(AppEvent::CheckRequest) => {
-                    tx.send(Message::Cap(input_capability(&uia))).unwrap()
+            // 取得したいプロパティ
+            cache.AddProperty(UIA_IsEnabledPropertyId)?;
+            cache.AddProperty(UIA_ControlTypePropertyId)?;
+            cache.AddPattern(UIA_TextPatternId)?;
+            cache.AddPattern(UIA_TextEditPatternId)?;
+            cache.AddPattern(UIA_ValuePatternId)?;
+
+            // 検索範囲
+            cache.SetTreeScope(TreeScope_Element)?;
+
+            // hooksからの通知を待機
+            loop {
+                println!("--- input_thread ---");
+                let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+                match event {
+                    Ok(AppEvent::CheckRequest) => {
+                        tx.send(Message::Cap(
+                            input_capability(&uia, &cache).unwrap_or_default(),
+                        ))?;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        break;
+                    }
+                    Err(_) => {}
                 }
-                Err(_) => {}
             }
+            Ok(())
         }
     });
 }
 
 // 外部ウィンドウのテキスト入力可能性を確認
-fn input_capability(uia: &IUIAutomation) -> InputCapability {
+pub fn input_capability(
+    uia: &IUIAutomation,
+    cache: &IUIAutomationCacheRequest,
+) -> Result<InputCapability> {
     unsafe {
         println!("--- Input_capability check ---");
         // フォーカス要素の取得
-        let Ok(focused_element) = uia.GetFocusedElement() else {
-            return win32_input_capability();
+        let Ok(el) = uia.GetFocusedElementBuildCache(cache) else {
+            return Ok(win32_input_capability());
         };
-        // println!("フォーカス要素: {:?}", focused_element);
+        // println!("フォーカス要素: {:?}", el);
         // 要素が無効化されていないかチェック
-        if let Ok(enabled) = focused_element.CurrentIsEnabled() {
+        if let Some(enabled) = el.CachedIsEnabled().ok() {
             if !enabled.as_bool() {
-                return InputCapability::No;
+                return Ok(InputCapability::No);
             }
         }
 
         // TextPatternかTextEditPatternが存在する
-        if focused_element.GetCurrentPattern(UIA_TextPatternId).is_ok()
-            || focused_element
-                .GetCurrentPattern(UIA_TextEditPatternId)
-                .is_ok()
-        {
-            if !is_read_only(&focused_element) {
-                return InputCapability::Yes;
-            }
-            return InputCapability::No;
+        let has_text_pattern = el.GetCachedPattern(UIA_TextPatternId).is_ok()
+            || el.GetCachedPattern(UIA_TextEditPatternId).is_ok();
+        if has_text_pattern {
+            return Ok(if is_read_only(&el) {
+                InputCapability::No
+            } else {
+                InputCapability::Yes
+            });
         }
 
         // ControlTypeのチェック
-        let Ok(control_type) = focused_element.CurrentControlType() else {
-            return InputCapability::No;
+        let Some(control_type) = el.CachedControlType().ok() else {
+            return Ok(InputCapability::No);
         };
 
         #[allow(non_upper_case_globals)]
-        match control_type {
+        let cap = match control_type {
             UIA_EditControlTypeId | UIA_DocumentControlTypeId => {
-                if !is_read_only(&focused_element) {
-                    return InputCapability::Yes;
+                if is_read_only(&el) {
+                    InputCapability::No
+                } else {
+                    InputCapability::Yes
                 }
             }
             UIA_CustomControlTypeId | UIA_WindowControlTypeId => {
                 // 入力可能かつカーソルがIビーム（テキスト要素）
-                if !is_read_only(&focused_element) && is_cursor_ibeam() {
-                    return InputCapability::Yes;
+                if !is_read_only(&el) && is_cursor_ibeam() {
+                    InputCapability::Yes
+                } else {
+                    InputCapability::No
                 }
             }
             _ => {
                 // その他のIDのうち、カーソルがIビームならテキスト要素として判別する
                 if is_cursor_ibeam() {
-                    return InputCapability::Unknown;
+                    InputCapability::Unknown
                 } else {
-                    return InputCapability::No;
+                    InputCapability::No
                 }
             }
-        }
+        };
 
         // 判別不可能な場合
         println!("UIA 判別不可能");
-        win32_input_capability()
+        if cap == InputCapability::No {
+            return Ok(win32_input_capability());
+        }
+
+        Ok(cap)
     }
 }
 
@@ -131,11 +175,11 @@ fn is_cursor_ibeam() -> bool {
 fn is_read_only(element: &IUIAutomationElement) -> bool {
     unsafe {
         // IUnknownを返すのでIUIAutomationValuePatternにキャストする
-        if let Ok(pattern_unk) = element.GetCurrentPattern(UIA_ValuePatternId) {
+        if let Ok(pattern_unk) = element.GetCachedPattern(UIA_ValuePatternId) {
             // パターンを持っていればキャストを試みる
             if let Ok(value_pattern) = pattern_unk.cast::<IUIAutomationValuePattern>() {
                 // ReadOnlyかチェック
-                if let Ok(read_only) = value_pattern.CurrentIsReadOnly() {
+                if let Ok(read_only) = value_pattern.CachedIsReadOnly() {
                     // println!("読み取り専用: {:?}", read_only.as_bool());
                     return read_only.as_bool();
                 }

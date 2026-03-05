@@ -6,6 +6,8 @@ pub struct MainWindow {
     pub input_mode: InputMode,
     // 自動消去用のID
     pub display_id: u64,
+    
+    
 }
 
 impl MainWindow {
