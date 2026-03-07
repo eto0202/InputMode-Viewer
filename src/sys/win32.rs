@@ -11,7 +11,7 @@ pub fn set_window_visibility(window: &Window, visible: bool) -> Result<()> {
 
     if visible {
         set_window_position(window)?;
-        set_window_opacity(window, 255)?;
+        set_window_opacity(window, 180)?;
         unsafe {
             ShowWindow(hwnd, SW_SHOWNOACTIVATE).ok()?;
         }

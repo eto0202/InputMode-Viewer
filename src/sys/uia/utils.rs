@@ -3,8 +3,7 @@ use windows::Win32::UI::Accessibility::*;
 
 use crate::sys::uia::input_mode::InputMode;
 
-// あらかじめ情報をキャッシュに乗せることで、find_ime_char内での通信コストをゼロに
-pub fn create_ime_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheRequest> {
+pub fn create_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheRequest> {
     println!("--- Create ime cache ---");
     unsafe {
         let cache_request = uia.CreateCacheRequest()?;

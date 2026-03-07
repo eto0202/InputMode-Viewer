@@ -1,5 +1,4 @@
 use gpui::*;
-use gpui_component_assets::*;
 use input_mode_viewer::*;
 
 // TODO:
@@ -9,13 +8,11 @@ use input_mode_viewer::*;
 // 現在の自動消去はバグがあるため修正
 // クールダウンタイムを実装
 // ウィンドウを半透明に
-// uia_eventが不安定
 
 fn main() {
-    let application = Application::new().with_assets(Assets);
+    let application = Application::new();
 
     application.run(move |app| {
-        gpui_component::init(app);
 
         // メインウィンドウを画面端にサイズ0で表示してユーザーから見えないように
         let options = WindowOptions {

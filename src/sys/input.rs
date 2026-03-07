@@ -1,6 +1,7 @@
 use crate::app::controller::Message;
 use crate::sys::hooks::AppEvent;
-use anyhow::Result;
+use crate::sys::uia;
+use anyhow::{Context, Result};
 use std::sync::mpsc;
 use std::thread;
 use windows::Win32::System::Com::*;
@@ -32,48 +33,53 @@ pub enum InputCapability {
 }
 
 pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
-    thread::spawn(move || -> Result<()> {
-        unsafe {
-            // COMの初期化
-            CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
+    thread::spawn(move || {
+        loop {
+            let result = || -> Result<()> {
+                println!("--- input_thread start ---");
+                unsafe {
+                    // COMの初期化
+                    CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+                        .ok()
+                        .context("UIAのインスタンス作成に失敗: input_thread")?;
 
-            let _guard = ComGuard;
+                    let _guard = ComGuard;
 
-            // uia取得
-            let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL)?;
-            // キャッシュリクエスト
-            let cache = uia.CreateCacheRequest()?;
-            // RawViewに設定し、すべての要素を無視せず表示
-            // これを設定しないとInnerTextBlockが無視される
-            cache.SetTreeFilter(&uia.RawViewCondition()?)?;
+                    // uia取得
+                    let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL)
+                        .context("UIA取得に失敗: input_thread")?;
+                    // キャッシュリクエスト
+                    let cache = uia::utils::create_cache_request(&uia)
+                        .context("キャッシュリクエスト作成に失敗: input_thread")?;
 
-            // 取得したいプロパティ
-            cache.AddProperty(UIA_IsEnabledPropertyId)?;
-            cache.AddProperty(UIA_ControlTypePropertyId)?;
-            cache.AddPattern(UIA_TextPatternId)?;
-            cache.AddPattern(UIA_TextEditPatternId)?;
-            cache.AddPattern(UIA_ValuePatternId)?;
-
-            // 検索範囲
-            cache.SetTreeScope(TreeScope_Element)?;
-
-            // hooksからの通知を待機
-            loop {
-                println!("--- input_thread ---");
-                let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
-                match event {
-                    Ok(AppEvent::CheckRequest) => {
-                        tx.send(Message::Cap(
-                            input_capability(&uia, &cache).unwrap_or_default(),
-                        ))?;
+                    // hooksからの通知を待機
+                    loop {
+                        let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+                        match event {
+                            Ok(AppEvent::CheckRequest) => {
+                                println!("Event Received: input_thread");
+                                tx.send(Message::Cap(
+                                    input_capability(&uia, &cache).unwrap_or_default(),
+                                ))?;
+                            }
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                println!("Disconnected: input_thread");
+                                break;
+                            }
+                            Err(_) => {}
+                        }
                     }
-                    Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        break;
-                    }
-                    Err(_) => {}
+                    Ok(())
                 }
+            }();
+
+            if let Err(e) = result {
+                eprintln!("input_thread fatal error. restarting in 3 seconds: {:?}", e);
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            } else {
+                // エラーなしで戻ってきた場合はスレッドを完全に終了
+                break;
             }
-            Ok(())
         }
     });
 }
