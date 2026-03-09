@@ -9,7 +9,6 @@ use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::Ime::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::Interface;
-use windows::core::{PCWSTR, w};
 
 // スレッドを抜ける時に自動でCoUninitializeを呼ぶためのガード
 struct ComGuard;
@@ -70,7 +69,9 @@ pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                                     continue;
                                 }
                                 println!("input_thread: Event Received");
-                                tx.send(Message::Cap(input_capability(&uia, &cache)))?;
+                                tx.send(Message::Cap(
+                                    input_capability(&uia, &cache).unwrap_or_default(),
+                                ))?;
                                 // 処理時刻を更新
                                 last_processed = std::time::Instant::now();
                             }

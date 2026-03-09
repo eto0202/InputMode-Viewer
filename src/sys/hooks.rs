@@ -9,12 +9,9 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::LRESULT;
 use windows::Win32::Foundation::WPARAM;
-use windows::Win32::System::Variant::VARIANT;
-use windows::Win32::System::Variant::VT_I4;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use windows_core::BSTR;
 
 // Dropガード
 struct HookGuard(HWINEVENTHOOK, HHOOK, HHOOK);
