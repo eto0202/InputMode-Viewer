@@ -24,3 +24,11 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_Input_Ime",
 ] }
 anyhow = "1.0.102"
+windows-core = "0.62.2"
+
+[profile.dev]
+debug = 1
+
+[profile.release]
+debug = 0
+

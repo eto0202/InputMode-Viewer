@@ -13,7 +13,7 @@ use windows::Win32::UI::Accessibility::*;
 struct ComGuard;
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        println!("uia_event COM Drop");
+        println!("uia_thread COM Drop");
         unsafe {
             CoUninitialize();
         }
@@ -24,8 +24,8 @@ pub fn uia_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
     unsafe {
         thread::spawn(move || {
             loop {
+                println!("-- Start uia_thread --");
                 let result = || -> Result<()> {
-                    println!("--- uia_thread start ---");
                     // COMの初期化
                     CoInitializeEx(None, COINIT_APARTMENTTHREADED)
                         .ok()
@@ -65,23 +65,30 @@ pub fn uia_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                     let mut cached_tray: Option<IUIAutomationElement> = None;
                     let mut last_sent_mode = InputMode::Unknown;
 
+                    // 最後に処理した時刻を記録する変数
+                    let mut last_processed =
+                        std::time::Instant::now() - std::time::Duration::from_millis(1000);
+
                     loop {
-                        // イベント受信とタイムアウト
-                        let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+                        // イベント受信
+                        let event = rx.recv();
                         match event {
                             Ok(AppEvent::CheckRequest) => {
-                                println!("Event Received: uia_thread");
-                            }
-                            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                println!("Disconnected: uia_thread");
-                                break;
+                                // デバウンス
+                                let now = std::time::Instant::now();
+                                if now.duration_since(last_processed)
+                                    < std::time::Duration::from_millis(200)
+                                {
+                                    while let Ok(_) = rx.try_recv() {}
+                                    continue;
+                                }
+                                println!("uia_thread: Event Received");
                             }
                             Err(_) => {}
                         }
                         // 要素を持ってなければ検索して取得
                         // キャッシュが無い場合のみ検索
                         if cached_tray.is_none() {
-                            println!("--- Nothing cached_tray ---");
                             // タスクバー本体(Shell_TrayWnd)を見つける
                             if let Ok(tray) = root.FindFirst(TreeScope_Children, &tray_condition) {
                                 cached_tray = Some(tray);
@@ -118,19 +125,19 @@ pub fn uia_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                                     }
                                     Err(_) => {
                                         // COMオブジェクトが無効になった時
-                                        println!("--- Element Error ---");
                                         last_sent_mode = InputMode::Unknown;
                                     }
                                 }
                                 // キャッシュの生存確認
                                 if tray.CurrentProcessId().is_err() {
-                                    println!("--- Cache is dead ---");
                                     cached_tray = None;
                                 }
                             }
                         }
+
+                        // 処理時刻を更新
+                        last_processed = std::time::Instant::now();
                     }
-                    Ok(())
                 }();
 
                 if let Err(e) = result {

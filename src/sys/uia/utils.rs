@@ -4,7 +4,7 @@ use windows::Win32::UI::Accessibility::*;
 use crate::sys::uia::input_mode::InputMode;
 
 pub fn create_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheRequest> {
-    println!("--- Create ime cache ---");
+    println!("-- Create UIA Cache --");
     unsafe {
         let cache_request = uia.CreateCacheRequest()?;
 

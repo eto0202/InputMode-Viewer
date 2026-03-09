@@ -9,12 +9,13 @@ use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::Ime::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::Interface;
+use windows::core::{PCWSTR, w};
 
 // スレッドを抜ける時に自動でCoUninitializeを呼ぶためのガード
 struct ComGuard;
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        println!("input COM drop");
+        println!("input_thread COM Drop");
         unsafe {
             CoUninitialize();
         }
@@ -35,8 +36,8 @@ pub enum InputCapability {
 pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
         loop {
+            println!("-- Start Input_thread --");
             let result = || -> Result<()> {
-                println!("--- input_thread start ---");
                 unsafe {
                     // COMの初期化
                     CoInitializeEx(None, COINIT_APARTMENTTHREADED)
@@ -52,24 +53,30 @@ pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                     let cache = uia::utils::create_cache_request(&uia)
                         .context("キャッシュリクエスト作成に失敗: input_thread")?;
 
+                    // 最後に処理した時刻を記録する変数
+                    let mut last_processed =
+                        std::time::Instant::now() - std::time::Duration::from_millis(1000);
                     // hooksからの通知を待機
                     loop {
-                        let event = rx.recv_timeout(std::time::Duration::from_millis(5000));
+                        let event = rx.recv();
                         match event {
                             Ok(AppEvent::CheckRequest) => {
-                                println!("Event Received: input_thread");
-                                tx.send(Message::Cap(
-                                    input_capability(&uia, &cache).unwrap_or_default(),
-                                ))?;
-                            }
-                            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                println!("Disconnected: input_thread");
-                                break;
+                                // デバウンス
+                                let now = std::time::Instant::now();
+                                if now.duration_since(last_processed)
+                                    < std::time::Duration::from_millis(200)
+                                {
+                                    while let Ok(_) = rx.try_recv() {}
+                                    continue;
+                                }
+                                println!("input_thread: Event Received");
+                                tx.send(Message::Cap(input_capability(&uia, &cache)))?;
+                                // 処理時刻を更新
+                                last_processed = std::time::Instant::now();
                             }
                             Err(_) => {}
                         }
                     }
-                    Ok(())
                 }
             }();
 
@@ -90,7 +97,7 @@ pub fn input_capability(
     cache: &IUIAutomationCacheRequest,
 ) -> Result<InputCapability> {
     unsafe {
-        println!("--- Input_capability check ---");
+        println!("-- Input_capability Check --");
         // フォーカス要素の取得
         let Ok(el) = uia.GetFocusedElementBuildCache(cache) else {
             return Ok(win32_input_capability());
@@ -106,38 +113,34 @@ pub fn input_capability(
         // TextPatternかTextEditPatternが存在する
         let has_text_pattern = el.GetCachedPattern(UIA_TextPatternId).is_ok()
             || el.GetCachedPattern(UIA_TextEditPatternId).is_ok();
-        if has_text_pattern {
-            return Ok(if is_read_only(&el) {
-                InputCapability::No
-            } else {
-                InputCapability::Yes
-            });
-        }
 
         // ControlTypeのチェック
         let Some(control_type) = el.CachedControlType().ok() else {
             return Ok(InputCapability::No);
         };
 
+        println!("control type: {:?}", control_type);
+
         #[allow(non_upper_case_globals)]
         let cap = match control_type {
-            UIA_EditControlTypeId | UIA_DocumentControlTypeId => {
-                if is_read_only(&el) {
-                    InputCapability::No
-                } else {
+            UIA_EditControlTypeId => {
+                if !is_read_only(&el) {
                     InputCapability::Yes
+                } else {
+                    InputCapability::No
                 }
             }
-            UIA_CustomControlTypeId | UIA_WindowControlTypeId => {
-                // 入力可能かつカーソルがIビーム（テキスト要素）
-                if !is_read_only(&el) && is_cursor_ibeam() {
+            UIA_PaneControlTypeId
+            | UIA_GroupControlTypeId
+            | UIA_CustomControlTypeId
+            | UIA_WindowControlTypeId => {
+                if !is_read_only(&el) && (is_cursor_ibeam() || has_text_pattern) {
                     InputCapability::Yes
                 } else {
                     InputCapability::No
                 }
             }
             _ => {
-                // その他のIDのうち、カーソルがIビームならテキスト要素として判別する
                 if is_cursor_ibeam() {
                     InputCapability::Unknown
                 } else {
@@ -148,7 +151,7 @@ pub fn input_capability(
 
         // 判別不可能な場合
         println!("UIA 判別不可能");
-        if cap == InputCapability::No {
+        if cap == InputCapability::Unknown {
             return Ok(win32_input_capability());
         }
 
@@ -209,7 +212,6 @@ fn win32_input_capability() -> InputCapability {
         // キャレットが存在し、点滅しているか
         let mut info = GUITHREADINFO::default();
         info.cbSize = std::mem::size_of::<GUITHREADINFO>() as u32;
-
         if GetGUIThreadInfo(thread_id, &mut info).is_ok() {
             // キャレットが見えていて点滅中
             if (info.flags & GUI_CARETBLINKING).0 != 0 {
@@ -224,6 +226,7 @@ fn win32_input_capability() -> InputCapability {
             // println!("IMMコンテキストが有効");
             return InputCapability::Yes;
         }
+
         println!("win32 判別不能");
         InputCapability::Unknown
     }

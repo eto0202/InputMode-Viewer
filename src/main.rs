@@ -13,7 +13,6 @@ fn main() {
     let application = Application::new();
 
     application.run(move |app| {
-
         // メインウィンドウを画面端にサイズ0で表示してユーザーから見えないように
         let options = WindowOptions {
             // PopUpにすることでタスクバーにアイコンが表示されない

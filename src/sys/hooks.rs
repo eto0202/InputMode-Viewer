@@ -9,15 +9,18 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::LRESULT;
 use windows::Win32::Foundation::WPARAM;
+use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::System::Variant::VT_I4;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+use windows_core::BSTR;
 
 // Dropガード
 struct HookGuard(HWINEVENTHOOK, HHOOK, HHOOK);
 impl Drop for HookGuard {
     fn drop(&mut self) {
-        println!("Unhook drop");
+        dbg!("Unhook drop");
         unsafe {
             let _ = UnhookWinEvent(self.0);
             let _ = UnhookWindowsHookEx(self.1);
@@ -35,19 +38,21 @@ pub enum AppEvent {
     CheckRequest,
 }
 
-// ウィンドウフォーカス切り替えフック
+// フォーカス切り替えフック
 unsafe extern "system" fn win_event_proc(
     _h_win_event_hook: HWINEVENTHOOK,
     event: u32,
-    hwnd: HWND,
+    _hwnd: HWND,
     _id_object: i32,
     _id_child: i32,
     _id_event_thread: u32,
     _dw_ms_event_time: u32,
 ) {
-    // フォーカスが切り替わったら通知を送る
-    if event == EVENT_SYSTEM_FOREGROUND && hwnd.0.is_null() != true {
-        send_event();
+    match event {
+        EVENT_OBJECT_FOCUS => {
+            println!("EVENT_OBJECT_FOCUS");
+        }
+        _ => {}
     }
 }
 
@@ -101,8 +106,8 @@ pub fn win_hooks() -> mpsc::Receiver<AppEvent> {
         unsafe {
             // ウィンドウフック
             let win_hook = SetWinEventHook(
-                EVENT_SYSTEM_FOREGROUND,
-                EVENT_SYSTEM_FOREGROUND,
+                EVENT_OBJECT_FOCUS,
+                EVENT_OBJECT_FOCUS,
                 None,
                 Some(win_event_proc), // コールバック関数を指定
                 0,
