@@ -9,6 +9,7 @@ use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::Ime::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::Interface;
+use winit::event_loop::EventLoopProxy;
 
 // スレッドを抜ける時に自動でCoUninitializeを呼ぶためのガード
 struct ComGuard;
@@ -32,7 +33,7 @@ pub enum InputCapability {
     Unknown,
 }
 
-pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
+pub fn input_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
         loop {
             println!("-- Start Input_thread --");
@@ -69,7 +70,7 @@ pub fn input_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                                     continue;
                                 }
                                 println!("input_thread: Event Received");
-                                tx.send(Message::Cap(
+                                proxy.send_event(Message::Cap(
                                     input_capability(&uia, &cache).unwrap_or_default(),
                                 ))?;
                                 // 処理時刻を更新

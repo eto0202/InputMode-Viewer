@@ -1,5 +1,11 @@
-use gpui::*;
-use input_mode_viewer::*;
+use std::sync::mpsc;
+
+use anyhow::Result;
+use input_mode_viewer::{
+    app::controller::{self, Message},
+    sys::{hooks, input, uia::uia_event},
+};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 // TODO:
 // モードの表示は入力状態移行時と、無操作状態が指定秒数経過後のみ。
@@ -9,23 +15,37 @@ use input_mode_viewer::*;
 // クールダウンタイムを実装
 // ウィンドウを半透明に
 
-fn main() {
-    let application = Application::new();
+fn main() -> Result<()> {
+    let event_loop = EventLoop::<Message>::with_user_event().build()?;
 
-    application.run(move |app| {
-        // メインウィンドウを画面端にサイズ0で表示してユーザーから見えないように
-        let options = WindowOptions {
-            // PopUpにすることでタスクバーにアイコンが表示されない
-            kind: WindowKind::PopUp,
-            titlebar: None,
-            focus: false,
-            window_bounds: Some(WindowBounds::Windowed(Bounds {
-                origin: Point::new(px(0.), px(0.)),
-                size: size(px(0.), px(0.)),
-            })),
-            ..Default::default()
-        };
+    let proxy = event_loop.create_proxy();
 
-        let _ = app.open_window(options, |_, app| app.new(app::controller::Controller::new));
+    let (tx_uia, rx_uia) = mpsc::channel();
+    let (tx_input, rx_input) = mpsc::channel();
+    let rx_hooks = hooks::win_hooks();
+
+    // ディスパッチャー
+    std::thread::spawn(move || -> Result<()> {
+        while let Ok(event) = rx_hooks.recv() {
+            let _ = tx_uia.send(event.clone());
+            let _ = tx_input.send(event.clone());
+        }
+        Ok(())
     });
+
+    let proxy_uia = proxy.clone();
+    let proxy_input = proxy.clone();
+
+    uia_event::uia_thread(proxy_uia, rx_uia);
+    input::input_thread(proxy_input, rx_input);
+
+    // イベントループを「制御を戻さない」モードに設定
+    event_loop.set_control_flow(ControlFlow::Wait);
+
+    let mut app = controller::Controller {
+        ..Default::default()
+    };
+
+    event_loop.run_app(&mut app).unwrap();
+    Ok(())
 }

@@ -8,6 +8,7 @@ use std::thread;
 use windows::Win32::System::Com::*;
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::*;
+use winit::event_loop::EventLoopProxy;
 
 // スレッドを抜ける時に自動でCoUninitializeを呼ぶためのガード
 struct ComGuard;
@@ -20,7 +21,7 @@ impl Drop for ComGuard {
     }
 }
 
-pub fn uia_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
+pub fn uia_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     unsafe {
         thread::spawn(move || {
             loop {
@@ -117,10 +118,10 @@ pub fn uia_thread(tx: mpsc::Sender<Message>, rx: mpsc::Receiver<AppEvent>) {
                                                 "[ Change mode: {:?} -> {:?} ]",
                                                 last_sent_mode, current_mode
                                             );
-                                            tx.send(Message::Mode(current_mode))?;
+                                            proxy.send_event(Message::Mode(current_mode))?;
                                             last_sent_mode = current_mode;
                                         } else {
-                                            tx.send(Message::Mode(last_sent_mode))?;
+                                            proxy.send_event(Message::Mode(last_sent_mode))?;
                                         }
                                     }
                                     Err(_) => {
