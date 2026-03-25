@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::mpsc::Sender;
@@ -28,14 +27,24 @@ impl Drop for HookGuard {
 
 // グローバルな送信機
 // コールバック関数からメインスレッドへ合図を送るため
+// std::sync::mpsc::Senderは、そのままでは複数のスレッドで同時に共有して使うことが出来ない
 static EVENT_SENDER: OnceLock<Mutex<Sender<AppEvent>>> = OnceLock::new();
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum AppEvent {
     CheckRequest,
 }
 
-// フォーカス切り替えフック
+// 通知送信用
+pub fn send_event() {
+    if let Some(sender_mutex) = EVENT_SENDER.get() {
+        if let Ok(tx) = sender_mutex.lock() {
+            let _ = tx.send(AppEvent::CheckRequest);
+        }
+    }
+}
+
+// フォーカス切り替え
 unsafe extern "system" fn win_event_proc(
     _h_win_event_hook: HWINEVENTHOOK,
     event: u32,
@@ -47,7 +56,7 @@ unsafe extern "system" fn win_event_proc(
 ) {
     match event {
         EVENT_OBJECT_FOCUS => {
-            println!("EVENT_OBJECT_FOCUS");
+            send_event();
         }
         _ => {}
     }
@@ -72,22 +81,13 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
     }
 }
 
-// クリックイベント
+// クリック
 unsafe extern "system" fn mouse_proc(ncode: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     unsafe {
         if ncode >= 0 && w_param.0 == WM_LBUTTONUP as usize {
             send_event();
         }
         CallNextHookEx(None, ncode, w_param, l_param)
-    }
-}
-
-// 通知送信用
-fn send_event() {
-    if let Some(sender_mutex) = EVENT_SENDER.get() {
-        if let Ok(tx) = sender_mutex.lock() {
-            let _ = tx.send(AppEvent::CheckRequest);
-        }
     }
 }
 
@@ -99,7 +99,7 @@ pub fn win_hooks() -> mpsc::Receiver<AppEvent> {
     EVENT_SENDER.set(Mutex::new(tx)).unwrap();
 
     // フック監視用の別スレッドを機動
-    thread::spawn(|| -> Result<()> {
+    thread::spawn(|| -> anyhow::Result<()> {
         unsafe {
             // ウィンドウフック
             let win_hook = SetWinEventHook(

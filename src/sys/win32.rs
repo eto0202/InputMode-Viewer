@@ -1,38 +1,35 @@
-use anyhow::Result;
 use windows::Win32::Foundation::*;
+use windows::Win32::Graphics::Dwm::{
+    DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+};
+use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::*;
-
-// ウィンドウの可視化
-pub fn set_window_visibility(hwnd: HWND, visible: bool) -> Result<()> {
-    if visible {
-        set_window_position(hwnd)?;
-        set_window_opacity(hwnd, 180)?;
-        unsafe {
-            ShowWindow(hwnd, SW_SHOWNOACTIVATE).ok()?;
-        }
-    } else {
-        set_window_opacity(hwnd, 0)?;
-    }
-    Ok(())
-}
+use windows_core::BOOL;
 
 // ウィンドウの位置指定
-pub fn set_window_position(hwnd: HWND) -> Result<()> {
-    let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS | SWP_NOCOPYBITS;
-
-    let mut point = POINT { x: 0, y: 0 };
+pub fn set_window_position(hwnd: HWND, predicted_x: i32, predicted_y: i32) -> anyhow::Result<()> {
+    // SWP_NOACTIVATE: フォーカスを奪わない
+    // SWP_NOSIZE: サイズは変えない
+    // SWP_ASYNCWINDOWPOS: スレッドをブロックせずに座標を送る
+    // SWP_NOCOPYBITS: 描画バッファのコピーをスキップ（DCompなので不要）
+    let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_NOCOPYBITS;
 
     unsafe {
-        if GetCursorPos(&mut point).is_ok() {
-            SetWindowPos(hwnd, None, point.x + 20, point.y + 20, 0, 0, uflags)?;
-        };
-    }
-
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            predicted_x,
+            predicted_y,
+            0,
+            0,
+            uflags,
+        )?
+    };
     Ok(())
 }
 
 // 指定されたwindowの最前面固定を設定
-pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> Result<()> {
+pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> anyhow::Result<()> {
     // 最前面を切り替える
     let insert_after = if enabled {
         // 最前面レイヤー
@@ -51,28 +48,84 @@ pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> Result<()> {
     Ok(())
 }
 
-// クリック透過
-pub fn set_click_through(hwnd: HWND) -> Result<()> {
+pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
     unsafe {
-        let current_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        // 基本スタイル
+        let style = GetWindowLongW(hwnd, GWL_STYLE);
+        let new_style = (style as u32 & !(WS_OVERLAPPED | WS_CAPTION | WS_THICKFRAME).0)
+            | WS_POPUP.0
+            | WS_VISIBLE.0;
+        SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
+
+        // 拡張スタイル
+        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
         SetWindowLongW(
             hwnd,
             GWL_EXSTYLE,
-            // WS_EX_NOACTIVATE: クリックしてもフォーカスを移さない
-            // WS_EX_TRANSPARENT: マウス入力を透過
-            // WS_EX_LAYERED: 透過ウィンドウ化
-            current_style | (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE).0 as i32,
+            ex_style
+                | (WS_EX_LAYERED
+                    | WS_EX_TRANSPARENT
+                    | WS_EX_NOACTIVATE
+                    | WS_EX_TOOLWINDOW
+                    | WS_EX_TOPMOST)
+                    .0 as i32
+                | 0x00200000, // WS_EX_NOREDIRECTIONBITMAP
         );
+
+        // 背景ブラシとDWM設定
+        SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, 0);
+
+        let margins = MARGINS {
+            cxLeftWidth: -1,
+            cxRightWidth: -1,
+            cyTopHeight: -1,
+            cyBottomHeight: -1,
+        };
+        let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+        // アニメーション無効
+        let disable_anim = BOOL(1);
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disable_anim as *const _ as _,
+            4,
+        );
+
+        // 最前面 位置指定
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            -10000,
+            -10000,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )?;
         Ok(())
     }
 }
 
 // ウィンドウの透明度
-// SW_HIDEはウィンドウを冬眠させ、gpuiの描画が止まってしまう可能性がある。透明度を変更することで可視と不可視を切り替える。
-pub fn set_window_opacity(hwnd: HWND, opacity: u8) -> Result<()> {
+pub fn set_window_opacity(hwnd: HWND, opacity: u8) -> anyhow::Result<()> {
     unsafe {
         // opacity: 0 (透明) - 255 (不透明)
-        SetLayeredWindowAttributes(hwnd, COLORREF(0x00000000), opacity, LWA_ALPHA)?;
-        Ok(())
-    }
+        SetLayeredWindowAttributes(hwnd, COLORREF(0), opacity, LWA_ALPHA)?;
+    };
+    Ok(())
+}
+
+// WS_POPUP に書き換え、枠線やタイトルバーに関連するフラグをすべて除去
+pub fn set_window_popup(hwnd: HWND) -> anyhow::Result<()> {
+    let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) };
+
+    let new_style = (style as u32
+        & !(WS_OVERLAPPED | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX).0)
+        | WS_POPUP.0;
+
+    unsafe {
+        SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
+    };
+
+    Ok(())
 }

@@ -1,19 +1,46 @@
-use anyhow::Result;
+use crate::sys::uia::text::InputMode;
+use anyhow::Context;
+use std::sync::Mutex;
+use std::sync::OnceLock;
+use windows::Win32::System::Com::CLSCTX_ALL;
+use windows::Win32::System::Com::CoCreateInstance;
 use windows::Win32::UI::Accessibility::*;
 
-use crate::sys::uia::input_mode::InputMode;
+// アプリ全体で共有されるUIA初期化用の鍵
+//  UIAの初期化は、複数のスレッドで同時に行うとクラッシュしたりバグったりするらしい
+pub static UIA_INIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-pub fn create_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheRequest> {
-    println!("-- Create UIA Cache --");
+pub fn get_uia_lock() -> &'static Mutex<()> {
+    // 初めて呼ばれた時にMutexを中に入れて、次からはそれを返す
+    UIA_INIT_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> {
+    let _lock = get_uia_lock().lock().unwrap();
+    // uia取得
+    let uia: IUIAutomation = unsafe {
+        CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL).context("UIA取得に失敗")?
+    };
+    // キャッシュリクエスト
+    let cache = create_cache_request(&uia).context("キャッシュリクエスト作成に失敗")?;
+
+    Ok((uia, cache))
+}
+
+fn create_cache_request(uia: &IUIAutomation) -> anyhow::Result<IUIAutomationCacheRequest> {
     unsafe {
-        let cache_request = uia.CreateCacheRequest()?;
+        let cache_request = uia
+            .CreateCacheRequest()
+            .context("Failed CreateCacheRequest")?;
 
         // RawViewに設定し、すべての要素を無視せず表示
         // これを設定しないとInnerTextBlockが無視される
-        cache_request.SetTreeFilter(&uia.RawViewCondition()?)?;
+        cache_request
+            .SetTreeFilter(&uia.RawViewCondition()?)
+            .context("Failed SetTreeFilter")?;
 
         // 取得したいプロパティ
-        // UIA探索用
+        // 探索用
         cache_request.AddProperty(UIA_NamePropertyId)?;
         cache_request.AddProperty(UIA_AutomationIdPropertyId)?;
         cache_request.AddProperty(UIA_IsOffscreenPropertyId)?;
@@ -26,7 +53,9 @@ pub fn create_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheReq
         cache_request.AddPattern(UIA_ValuePatternId)?;
 
         // 検索範囲
-        cache_request.SetTreeScope(TreeScope_Element)?;
+        cache_request
+            .SetTreeScope(TreeScope_Element)
+            .context("Failed SetTreeScope")?;
 
         Ok(cache_request)
     }
@@ -36,30 +65,53 @@ pub fn create_cache_request(uia: &IUIAutomation) -> Result<IUIAutomationCacheReq
 pub fn find_element(
     array: &IUIAutomationElementArray,
     target_id: &'static str,
-) -> Option<IUIAutomationElement> {
+) -> anyhow::Result<IUIAutomationElement> {
     unsafe {
-        (0..array.Length().unwrap_or(0))
-            .filter_map(|i| array.GetElement(i).ok())
-            .find_map(|el| {
-                // IDチェック
-                let id = el.CachedAutomationId().ok()?.to_string();
-                if id != target_id {
-                    return None;
-                }
+        // 早期リターン
+        let len = array.Length()?;
+        for i in 0..len {
+            // 早期リターン
+            let el = array.GetElement(i)?;
 
-                // 表示状態チェック
-                let is_visible_true = el.CachedIsOffscreen().ok()?.as_bool();
-                if is_visible_true {
-                    return None;
-                }
+            if crate::skip_err!(el.CachedAutomationId()).to_string() != target_id {
+                continue;
+            }
 
-                // "\u{e971}"はIME用では無い可能性がある
-                let name = el.CachedName().ok()?.to_string();
-                if matches!(InputMode::from_glyph(name), InputMode::Unknown) {
-                    return None;
-                }
+            if crate::skip_err!(el.CachedIsOffscreen()).as_bool() {
+                continue;
+            }
 
-                return Some(el);
-            })
+            let name = crate::skip_err!(el.CachedName()).to_string();
+            if matches!(InputMode::from_glyph(&name), InputMode::Unknown) {
+                continue;
+            }
+
+            return Ok(el);
+        }
+
+        Err(anyhow::anyhow!("Element Not Available"))
     }
+}
+
+// 失敗したらcontinueするマクロたち
+// Result
+#[macro_export]
+macro_rules! skip_err {
+    ($res:expr) => {
+        match $res {
+            Ok(val) => val,
+            Err(_) => continue,
+        }
+    };
+}
+
+// Option
+#[macro_export]
+macro_rules! skip_none {
+    ($opt:expr) => {
+        match $opt {
+            Some(val) => val,
+            None => continue,
+        }
+    };
 }
