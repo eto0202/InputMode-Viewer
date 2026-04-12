@@ -1,13 +1,7 @@
-use crate::sys::uia::cap::InputCapability;
-use crate::sys::uia::text::InputMode;
-use crate::sys::win32;
-use crate::{sys::renderer::DCompRenderer, ui::popup_window::MainWindow};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tray_icon::TrayIcon;
-use tray_icon::{
-    TrayIconBuilder,
-    menu::{Menu, MenuEvent, MenuItem},
-};
+use tray_icon::menu::MenuEvent;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
@@ -17,13 +11,22 @@ use winit::event::WindowEvent;
 use winit::window::{Window, WindowAttributes, WindowId};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
-const ID_QUIT: &str = "Quit";
+use crate::common::app_config::AppConfig;
+use crate::common::config;
+use crate::core::app::tray;
+use crate::core::sys::renderer::DCompRenderer;
+use crate::core::sys::uia::cap::InputCapability;
+use crate::core::sys::uia::text::InputMode;
+use crate::core::sys::win32;
+use crate::core::window::floating_window::FloatingWindow;
+use crate::ui;
 
-// 外部から届くIMEの変更通知
+// 外部から届くカスタムイベント
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
     Cap(InputCapability),
     Mode(InputMode),
+    ConfigUpdated,
 }
 
 // 「隠す」「フェードイン中」「表示中」の3つの状態で管理し、アニメーションを実装
@@ -41,7 +44,7 @@ pub enum ShowState {
 pub struct Controller {
     pub tray_icon: Option<TrayIcon>,
     pub proxy_window: Option<Window>,
-    pub main_window: Option<MainWindow>,
+    pub main_window: Option<FloatingWindow>,
     pub main_window_id: Option<WindowId>,
     pub renderer: Option<DCompRenderer>,
     pub last_cap: InputCapability,
@@ -50,6 +53,7 @@ pub struct Controller {
     pub show_state: ShowState,
     pub last_raw_mouse_x: i32,
     pub last_raw_mouse_y: i32,
+    pub config: Option<Arc<RwLock<AppConfig>>>,
 }
 
 impl Default for Controller {
@@ -66,6 +70,7 @@ impl Default for Controller {
             show_state: ShowState::Hidden,
             last_raw_mouse_x: 0,
             last_raw_mouse_y: 0,
+            config: None,
         }
     }
 }
@@ -89,9 +94,13 @@ impl ApplicationHandler<Message> for Controller {
     // メインウィンドウが表示されている間は常に最新のマウス位置を追いかける
     // 非表示の時は何か起きるまで寝て待つ設定にしてCPU消費を抑える
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // タスクトレイイベント
         if let Ok(event) = MenuEvent::receiver().try_recv() {
             match event.id.as_ref() {
-                ID_QUIT => event_loop.exit(),
+                tray::ID_QUIT => event_loop.exit(),
+                tray::ID_SETTING => {
+                    let _ = ui::spawn::spawn_settings_ui();
+                }
                 _ => {}
             }
         }
@@ -129,6 +138,25 @@ impl ApplicationHandler<Message> for Controller {
                     println!("last_mode: {:?}", self.last_mode);
                 }
             }
+            Message::ConfigUpdated => {
+                let new_data = config::load_config();
+
+                if let Some(con) = &self.config {
+                    // 書き込みロックを取得
+                    match con.write() {
+                        Ok(mut config_lock) => {
+                            // デリファレンスして中身を丸ごと差し替える
+                            *config_lock = new_data;
+                            println!("config updated!");
+                            // スコープを抜けると自動的にアンロック
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to lock config for writing: {:?}", e);
+                        }
+                    }
+                    // その後、この最新設定を使ってウィンドウを更新する
+                }
+            }
         }
     }
 }
@@ -150,7 +178,7 @@ impl Controller {
             let window = event_loop.create_window(attr)?;
             self.proxy_window = Some(window);
 
-            let mw = MainWindow::new(event_loop)?;
+            let mw = FloatingWindow::new(event_loop)?;
             self.main_window_id = Some(mw.id);
 
             win32::set_window_style(mw.hwnd)?;
@@ -167,17 +195,8 @@ impl Controller {
             self.main_window = Some(mw);
             self.renderer = Some(renderer);
 
-            // タスクトレイに「Quit」メニュー付きのアイコンを出す
-            let tray_menu = Menu::new();
-            let quit_item = MenuItem::with_id(ID_QUIT, "Quit", true, None);
-            tray_menu.append(&quit_item)?;
-
-            let tray_icon = TrayIconBuilder::new()
-                .with_menu(Box::new(tray_menu))
-                .with_tooltip("Input Mode Viewer")
-                .build()?;
-
-            self.tray_icon = Some(tray_icon);
+            // トレイアイコン
+            self.tray_icon = Some(tray::tray_icon()?);
         }
         Ok(())
     }
@@ -282,7 +301,7 @@ impl Controller {
         let predicted_y = current.y + (dy as f32 * k) as i32;
 
         // マウスから少しずらす
-        let offset = (20.0 * scale) as i32;
+        let offset = 20 * scale as i32;
 
         let _ = win32::set_window_position(hwnd, predicted_x + offset, predicted_y + offset);
 

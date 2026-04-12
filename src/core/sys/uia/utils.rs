@@ -1,4 +1,4 @@
-use crate::sys::uia::text::InputMode;
+use crate::core::sys::uia::text::InputMode;
 use anyhow::Context;
 use std::sync::Mutex;
 use std::sync::OnceLock;

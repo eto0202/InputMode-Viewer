@@ -1,3 +1,5 @@
+use anyhow::*;
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Dwm::{
     DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
@@ -128,4 +130,11 @@ pub fn set_window_popup(hwnd: HWND) -> anyhow::Result<()> {
     };
 
     Ok(())
+}
+
+pub fn get_hwnd(has_handle: &impl HasWindowHandle) -> anyhow::Result<HWND> {
+    match has_handle.window_handle()?.as_raw() {
+        RawWindowHandle::Win32(h) => Ok(HWND(h.hwnd.get() as _)),
+        _ => Err(anyhow!("Not Win32")),
+    }
 }

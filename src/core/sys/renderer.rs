@@ -24,23 +24,22 @@ use windows::{
 };
 
 /*
-1.D3D11 (設備業者)
+1.D3D11
     GPUという巨大な調理場を確保する担当。
-2.DXGI (物流業者)
+2.DXGI
     「できた料理（画像）を、どうやってお客さん（画面）に届けるか」という配送ルート（スワップチェーン）を作る担当。
-3.Direct2D (シェフ)
+3.Direct2D
     「実際に絵を描く」担当。
-4.DirectWrite (筆専門)
+4.DirectWrite
     「綺麗な文字のデザイン」だけを専門に考える担当。
-5.DirectComposition (盛り付け・合成担当)
+5.DirectComposition
     描いた絵を「シール」のようにウィンドウにペタッと貼り付けたり、透かしを入れたりする最新の担当。
 */
-use crate::sys::uia::text::InputMode;
+use crate::core::sys::uia::text::InputMode;
 
-#[allow(dead_code)]
 pub struct DCompRenderer {
-    d2d_factory: ID2D1Factory1,
-    dw_factory: IDWriteFactory,
+    pub d2d_factory: ID2D1Factory1,
+    pub dw_factory: IDWriteFactory,
     d2d_context: ID2D1DeviceContext, // 実際の描画命令を出すためのコンテキスト
     swap_chain: IDXGISwapChain1,     // 描画した画像を画面に表示するためのバッファ管理機構
     brush: ID2D1SolidColorBrush,
@@ -197,7 +196,7 @@ impl DCompRenderer {
             // アンチエイリアス
             self.d2d_context
                 .SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-            // 景を指定した色で塗りつぶし
+            // 背景を指定した色で塗りつぶし
             self.d2d_context.Clear(Some(&D2D1_COLOR_F {
                 r: 0.2,
                 g: 0.2,

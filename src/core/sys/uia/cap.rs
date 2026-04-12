@@ -1,7 +1,7 @@
-use crate::app::controller::Message;
-use crate::sys::hooks::AppEvent;
-use crate::sys::uia::com;
-use crate::sys::uia::utils::uia_init;
+use crate::core::app::controller::Message;
+use crate::core::sys::hooks::AppEvent;
+use crate::core::sys::uia::com;
+use crate::core::sys::uia::utils::uia_init;
 use anyhow::Context;
 use std::sync::mpsc;
 use std::thread;

@@ -29,10 +29,18 @@ windows = { version = "0.62.2", features = [
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dxgi",
-    "Win32_System_LibraryLoader"
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_Security",
 ] }
 anyhow = "1.0.102"
 windows-core = "0.62.2"
+serde = "1.0.228"
+toml = "1.1.2"
+directories = "6.0.0"
+notify = "8.2.0"
+gpui = "0.2.2"
+windows-numerics = "0.3.1"
 
 [profile.dev]
 debug = 1

@@ -1,3 +1,3 @@
-pub mod app;
-pub mod sys;
+pub mod common;
+pub mod core;
 pub mod ui;
