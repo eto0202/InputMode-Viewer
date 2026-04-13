@@ -11,8 +11,9 @@ use crate::{
         },
     },
 };
+use parking_lot::RwLock;
 use std::sync::Arc;
-use std::sync::{RwLock, mpsc};
+use std::sync::mpsc;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub fn run() -> anyhow::Result<()> {

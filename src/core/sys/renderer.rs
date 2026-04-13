@@ -37,6 +37,7 @@ use windows::{
 */
 use crate::core::sys::uia::text::InputMode;
 
+#[derive(Debug)]
 pub struct DCompRenderer {
     pub d2d_factory: ID2D1Factory1,
     pub dw_factory: IDWriteFactory,

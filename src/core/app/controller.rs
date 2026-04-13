@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use anyhow::Context;
+use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tray_icon::TrayIcon;
 use tray_icon::menu::MenuEvent;
@@ -6,19 +9,19 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalPosition, LogicalSize};
+use winit::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use winit::event::WindowEvent;
 use winit::window::{Window, WindowAttributes, WindowId};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
-use crate::common::app_config::AppConfig;
+use crate::common::app_config::{AppConfig, WindowRole, WindowStyle};
 use crate::common::config;
 use crate::core::app::tray;
 use crate::core::sys::renderer::DCompRenderer;
 use crate::core::sys::uia::cap::InputCapability;
 use crate::core::sys::uia::text::InputMode;
 use crate::core::sys::win32;
-use crate::core::window::floating_window::FloatingWindow;
+use crate::core::window::window::ManagedWindow;
 use crate::ui;
 
 // 外部から届くカスタムイベント
@@ -43,17 +46,23 @@ pub enum ShowState {
 // 全ての部品
 pub struct Controller {
     pub tray_icon: Option<TrayIcon>,
+
     pub proxy_window: Option<Window>,
-    pub main_window: Option<FloatingWindow>,
-    pub main_window_id: Option<WindowId>,
+
+    pub windows: Option<HashMap<WindowId, ManagedWindow>>,
+    pub config: Option<Arc<RwLock<AppConfig>>>,
+
     pub renderer: Option<DCompRenderer>,
+
     pub last_cap: InputCapability,
     pub last_mode: InputMode,
+
     pub is_visible: bool,
+
     pub show_state: ShowState,
+
     pub last_raw_mouse_x: i32,
     pub last_raw_mouse_y: i32,
-    pub config: Option<Arc<RwLock<AppConfig>>>,
 }
 
 impl Default for Controller {
@@ -61,8 +70,8 @@ impl Default for Controller {
         Self {
             tray_icon: None,
             proxy_window: None,
-            main_window: None,
-            main_window_id: None,
+            windows: None,
+            config: None,
             renderer: None,
             last_cap: InputCapability::Unknown,
             last_mode: InputMode::Unknown,
@@ -70,7 +79,6 @@ impl Default for Controller {
             show_state: ShowState::Hidden,
             last_raw_mouse_x: 0,
             last_raw_mouse_y: 0,
-            config: None,
         }
     }
 }
@@ -106,18 +114,20 @@ impl ApplicationHandler<Message> for Controller {
         }
 
         if self.is_visible {
-            let window_info = self
-                .main_window
-                .as_ref()
-                .map(|mw| (mw.hwnd, mw.window.scale_factor()));
+            let managed = self.find_by_role(WindowRole::Floating);
+            let window_date = if let Ok(window) = managed {
+                // 必要な値だけコピー
+                let hwnd = window.hwnd;
+                let scale = window.window.scale_factor();
+                window.window.request_redraw();
+                Some((hwnd, scale))
+            } else {
+                None
+            };
 
-            if let Some((hwnd, scale)) = window_info {
+            if let Some((hwnd, scale)) = window_date {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
                 self.set_predicted_window_position(hwnd, scale);
-
-                if let Some(mw) = &mut self.main_window {
-                    mw.window.request_redraw();
-                }
             }
         } else {
             event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
@@ -143,17 +153,10 @@ impl ApplicationHandler<Message> for Controller {
 
                 if let Some(con) = &self.config {
                     // 書き込みロックを取得
-                    match con.write() {
-                        Ok(mut config_lock) => {
-                            // デリファレンスして中身を丸ごと差し替える
-                            *config_lock = new_data;
-                            println!("config updated!");
-                            // スコープを抜けると自動的にアンロック
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to lock config for writing: {:?}", e);
-                        }
-                    }
+                    let mut lock = con.write();
+                    // デリファレンスして中身を丸ごと差し替える
+                    *lock = new_data;
+                    println!("config updated!");
                     // その後、この最新設定を使ってウィンドウを更新する
                 }
             }
@@ -162,7 +165,7 @@ impl ApplicationHandler<Message> for Controller {
 }
 
 impl Controller {
-    fn handle_resumed(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
+    fn handle_resumed(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
         if self.proxy_window.is_none() {
             // プロキシウィンドウを作成
             // メインウィンドウを消した時にアプリ自体が終了してしまうことがあるため
@@ -175,11 +178,12 @@ impl Controller {
                 .with_max_inner_size(LogicalSize::new(0, 0))
                 .with_position(LogicalPosition::new(0, 0));
 
-            let window = event_loop.create_window(attr)?;
+            let window = el.create_window(attr)?;
             self.proxy_window = Some(window);
 
-            let mw = FloatingWindow::new(event_loop)?;
-            self.main_window_id = Some(mw.id);
+            self.windows = Some(HashMap::new());
+            let _id = self.create_window(el, WindowRole::Floating).unwrap();
+            let mw = self.find_by_role(WindowRole::Floating)?;
 
             win32::set_window_style(mw.hwnd)?;
             let (width, height) = mw.size();
@@ -190,9 +194,9 @@ impl Controller {
             renderer.set_visibility(0.0)?;
 
             // 描画更新
+            let _size = mw.window.request_inner_size(PhysicalSize::new(100, 40));
             mw.window.request_redraw();
 
-            self.main_window = Some(mw);
             self.renderer = Some(renderer);
 
             // トレイアイコン
@@ -207,12 +211,16 @@ impl Controller {
         id: WindowId,
         event: WindowEvent,
     ) -> anyhow::Result<()> {
-        if Some(id) != self.main_window_id {
-            return Ok(());
-        }
+        let (mw, renderer) = {
+            let renderer = self.renderer.as_ref().context("renderer is missing")?;
+            let windows = self.windows.as_mut().context("windows is missing")?;
 
-        let (Some(mw), Some(renderer)) = (&mut self.main_window, &self.renderer) else {
-            return Ok(());
+            let mw = windows
+                .values_mut()
+                .find(|w| w.role == WindowRole::Floating)
+                .context("Not found role")?;
+
+            (mw, renderer)
         };
 
         // 表示判定
@@ -309,4 +317,78 @@ impl Controller {
         self.last_raw_mouse_x = current.x;
         self.last_raw_mouse_y = current.y;
     }
+
+    // ウィンドウ作成と登録
+    pub fn create_window(
+        &mut self,
+        el: &ActiveEventLoop,
+        role: WindowRole,
+    ) -> anyhow::Result<WindowId> {
+        let managed = {
+            // 設定から該当するスタイルを取得
+            let cfg = self.config.clone().context("Config is missing")?;
+            let style = get_style(&cfg, role)?;
+            ManagedWindow::new(el, role, &*style)?
+        };
+
+        let id = managed.window.id();
+        let windows = self.windows.as_mut().context("Windows is missing")?;
+
+        windows.insert(id, managed);
+
+        Ok(id)
+    }
+
+    // ロール検索 参照
+    pub fn find_by_role(&self, role: WindowRole) -> anyhow::Result<&ManagedWindow> {
+        let windows = self.windows.as_ref().context("Windows is missing")?;
+
+        windows
+            .values()
+            .find(|w| w.role == role)
+            .context("Not find role")
+    }
+
+    // ロール検索 可変参照
+    pub fn find_by_role_mut(&mut self, role: WindowRole) -> anyhow::Result<&mut ManagedWindow> {
+        let windows = self.windows.as_mut().context("Windows is missing")?;
+
+        windows
+            .values_mut()
+            .find(|w| w.role == role)
+            .context("Not find role")
+    }
+
+    // 全ウィンドウに再描画を伝播
+    pub fn apply_config_to_all(&mut self) -> anyhow::Result<()> {
+        let windows = self.windows.as_mut().context("Windows is missing")?;
+
+        for managed in windows.values_mut() {
+            let cfg = self.config.as_ref().context("Config is missing")?;
+            let _style = get_style(cfg, managed.role);
+
+            // ここに各設定
+
+            managed.window.request_redraw();
+        }
+
+        Ok(())
+    }
+}
+
+// スタイルの取得
+pub fn get_style(
+    cfg: &Arc<RwLock<AppConfig>>,
+    role: WindowRole,
+) -> anyhow::Result<MappedRwLockReadGuard<'_, WindowStyle>> {
+    // ロックを取得
+    let guard = cfg.read();
+
+    // ガードをWindowStyleだけに絞り込む
+    let style = RwLockReadGuard::map(guard, |cfg| match role {
+        WindowRole::Floating => &cfg.floating.style,
+        WindowRole::Fixed => &cfg.fixed.style,
+    });
+
+    Ok(style)
 }

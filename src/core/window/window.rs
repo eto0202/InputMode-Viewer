@@ -1,20 +1,25 @@
+use std::sync::Arc;
+
+use crate::common::app_config::{WindowRole, WindowStyle};
 use crate::core::sys::win32;
 use windows::Win32::Foundation::HWND;
-use winit::dpi::LogicalSize;
 use winit::platform::windows::CornerPreference;
-use winit::window::{Window, WindowAttributes, WindowId};
+use winit::window::{Window, WindowAttributes};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
-pub struct FloatingWindow {
-    pub window: Window,
-    // 自動消去用のID
-    pub id: WindowId,
+pub struct ManagedWindow {
+    pub window: Arc<Window>,
     pub hwnd: HWND,
-    pub display_id: i32,
+    pub role: WindowRole,
 }
 
-impl FloatingWindow {
-    pub fn new(event_loop: &ActiveEventLoop) -> anyhow::Result<Self> {
+impl ManagedWindow {
+    pub fn new(
+        el: &ActiveEventLoop,
+        role: WindowRole,
+        _style: &WindowStyle,
+    ) -> anyhow::Result<Self> {
+        // 共通の属性定義
         let attr = WindowAttributes::default()
             .with_decorations(false)
             .with_transparent(true)
@@ -23,20 +28,17 @@ impl FloatingWindow {
             .with_skip_taskbar(true)
             .with_no_redirection_bitmap(false)
             .with_theme(None)
-            .with_corner_preference(CornerPreference::Round)
-            .with_max_inner_size(LogicalSize::new(100, 30));
+            .with_corner_preference(CornerPreference::Round);
 
-        let window = event_loop.create_window(attr)?;
-        let id = window.id();
+        let window = Arc::new(el.create_window(attr)?);
         let hwnd = win32::get_hwnd(&window)?;
 
         win32::set_window_style(hwnd)?;
 
         Ok(Self {
             window: window,
-            id: id,
             hwnd: hwnd,
-            display_id: 0,
+            role,
         })
     }
 
