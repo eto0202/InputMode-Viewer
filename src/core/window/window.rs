@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::common::app_config::{WindowRole, WindowStyle};
 use crate::core::sys::win32;
 use windows::Win32::Foundation::HWND;
-use winit::platform::windows::CornerPreference;
+use winit::dpi::LogicalSize;
 use winit::window::{Window, WindowAttributes};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
@@ -28,7 +28,7 @@ impl ManagedWindow {
             .with_skip_taskbar(true)
             .with_no_redirection_bitmap(false)
             .with_theme(None)
-            .with_corner_preference(CornerPreference::Round);
+            .with_inner_size(LogicalSize::new(1, 1));
 
         let window = Arc::new(el.create_window(attr)?);
         let hwnd = win32::get_hwnd(&window)?;
@@ -40,12 +40,5 @@ impl ManagedWindow {
             hwnd: hwnd,
             role,
         })
-    }
-
-    pub fn size(&self) -> (u32, u32) {
-        (
-            self.window.inner_size().width,
-            self.window.inner_size().height,
-        )
     }
 }

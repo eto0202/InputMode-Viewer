@@ -1,3 +1,5 @@
+use std::f32;
+
 use windows::{
     Win32::{
         Foundation::*,
@@ -35,28 +37,38 @@ use windows::{
 5.DirectComposition
     描いた絵を「シール」のようにウィンドウにペタッと貼り付けたり、透かしを入れたりする最新の担当。
 */
-use crate::core::sys::uia::text::InputMode;
+use crate::{common::app_config::WindowStyle, core::sys::uia::text::InputMode};
 
 #[derive(Debug)]
 pub struct DCompRenderer {
     pub d2d_factory: ID2D1Factory1,
     pub dw_factory: IDWriteFactory,
-    d2d_context: ID2D1DeviceContext, // 実際の描画命令を出すためのコンテキスト
-    swap_chain: IDXGISwapChain1,     // 描画した画像を画面に表示するためのバッファ管理機構
-    brush: ID2D1SolidColorBrush,
-    format: IDWriteTextFormat,
+    pub d2d_context: ID2D1DeviceContext, // 実際の描画命令を出すためのコンテキスト
+    pub swap_chain: IDXGISwapChain1,     // 描画した画像を画面に表示するためのバッファ管理機構
+    pub font_brush: ID2D1SolidColorBrush,
+    pub bg_brush: ID2D1SolidColorBrush,
+    pub format: IDWriteTextFormat,
 
     // Windowsのデスクトップコンポジターとやり取りし、描画内容をウィンドウに貼り付けるためのもの
-    dcomp_device: IDCompositionDevice,
+    pub dcomp_device: IDCompositionDevice,
     pub dcomp_visual: IDCompositionVisual,
     pub dcomp_target: IDCompositionTarget,
 
     // ウィンドウ全体の不透明度などを制御するためのエフェクト設定
-    dcomp_effect_group: IDCompositionEffectGroup,
+    pub dcomp_effect_group: IDCompositionEffectGroup,
+
+    // 現在のスタイルのキャッシュ
+    pub current_font_size: f32,
+    pub current_bg_color: D2D1_COLOR_F,
 }
 
 impl DCompRenderer {
-    pub fn new(hwnd: HWND, width: u32, height: u32, scale: f64) -> anyhow::Result<Self> {
+    pub fn new(
+        hwnd: HWND,
+        input_mode: InputMode,
+        style: &WindowStyle,
+        scale: f64,
+    ) -> anyhow::Result<(Self, f32, f32)> {
         unsafe {
             // D3D11 Deviceの作成
             // 全ての基盤となるGPUとの対話窓口
@@ -86,9 +98,58 @@ impl DCompRenderer {
             // DXGISwapChain(Flip Model)の作成
             // 描画結果を画面に送り出すためのダブルバッファ
             let dxgi_factory: IDXGIFactory2 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))?;
+
+            // DirectCompositionのセットアップ
+            let dcomp_device: IDCompositionDevice = DCompositionCreateDevice(&dxgi_device)?;
+            // 特定のウィンドウを描画対象に
+            let dcomp_target = dcomp_device.CreateTargetForHwnd(hwnd, BOOL(1).as_bool())?;
+            // 描画されるレイヤー。ここにswap_chainをセット
+            let dcomp_visual = dcomp_device.CreateVisual()?;
+
+            // エフェクトグループを作成
+            // 透明度などを制御するための入れ物
+            let dcomp_effect_group = dcomp_device.CreateEffectGroup()?;
+            // Visual にエフェクトを紐付ける（初期値は不透明度 1.0 にしておく）
+            dcomp_visual.SetEffect(&dcomp_effect_group)?;
+            dcomp_target.SetRoot(&dcomp_visual)?;
+
+            // テキスト作成
+            let dw_factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
+            // テキストのフォントやサイズ、整列などの定義
+            // w!はUTF-16のワイド文字列に変換するマクロ
+            let format = dw_factory.CreateTextFormat(
+                w!("Noto Sans JP"), // フォント名（Windowsにインストールされている必要あり。無い場合は代替フォント）
+                None,               // フォントコレクション（Noneはシステム標準）
+                DWRITE_FONT_WEIGHT_MEDIUM, // 太さ
+                DWRITE_FONT_STYLE_NORMAL, // スタイル（イタリックなど）
+                DWRITE_FONT_STRETCH_NORMAL, // 文字幅の伸縮
+                style.font_size,    // フォントサイズ（DIP単位）
+                w!("ja-jp"),        // 言語
+            )?;
+
+            format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+            format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+            // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
+            let text: Vec<u16> = input_mode
+                .as_str()
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            let text_layout = dw_factory.CreateTextLayout(&text, &format, f32::MAX, f32::MAX)?;
+
+            let mut metrics = std::mem::zeroed();
+            text_layout.GetMetrics(&mut metrics)?;
+
+            // パディングを足して正確なスワップチェーンのサイズを算出
+            let logical_w = metrics.width + style.padding * 2.0;
+            let logical_h = metrics.height + style.padding * 2.0;
+
+            let physical_w = (logical_w * scale as f32) as u32;
+            let physical_h = (logical_h * scale as f32) as u32;
+
             let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
-                Width: width,                       // 画面の幅
-                Height: height,                     // 画面の高さ
+                Width: physical_w,                  // 画面の幅
+                Height: physical_h,                 // 画面の高さ
                 Format: DXGI_FORMAT_B8G8R8A8_UNORM, // 色の並び(Blue, Green, Red, Alpha)
                 Stereo: BOOL(0),                    // 3D立体視にするか（基本0）
                 SampleDesc: DXGI_SAMPLE_DESC {
@@ -107,71 +168,45 @@ impl DCompRenderer {
             let swap_chain =
                 dxgi_factory.CreateSwapChainForComposition(&d3d_device, &swap_chain_desc, None)?;
 
-            // DirectCompositionのセットアップ
-            let dcomp_device: IDCompositionDevice = DCompositionCreateDevice(&dxgi_device)?;
-            // 特定のウィンドウを描画対象に
-            let dcomp_target = dcomp_device.CreateTargetForHwnd(hwnd, BOOL(1).as_bool())?;
-            // 描画されるレイヤー。ここにswap_chainをセット
-            let dcomp_visual = dcomp_device.CreateVisual()?;
+            // SwapChainをVisualの内容にセット
+            dcomp_visual.SetContent(&swap_chain)?;
 
-            // エフェクトグループを作成
-            // 透明度などを制御するための入れ物
-            let dcomp_effect_group = dcomp_device.CreateEffectGroup()?;
-            // Visual にエフェクトを紐付ける（初期値は不透明度 1.0 にしておく）
-            dcomp_visual.SetEffect(&dcomp_effect_group)?;
-
-            // テキスト作成
-            let dw_factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-            // テキストのフォントやサイズ、整列などの定義
-            // w!はUTF-16のワイド文字列に変換するマクロ
-            let format = dw_factory.CreateTextFormat(
-                w!("Noto Sans JP"), // フォント名（Windowsにインストールされている必要あり。無い場合は代替フォント）
-                None,               // フォントコレクション（Noneはシステム標準）
-                DWRITE_FONT_WEIGHT_MEDIUM, // 太さ
-                DWRITE_FONT_STYLE_NORMAL, // スタイル（イタリックなど）
-                DWRITE_FONT_STRETCH_NORMAL, // 文字幅の伸縮
-                14.0,               // フォントサイズ（DIP単位）
-                w!("ja-jp"),        // 言語
-            )?;
-
-            format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
-            format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-
-            let brush = d2d_context.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 0.95,
-                    g: 0.95,
-                    b: 0.95,
-                    a: 1.0,
-                },
-                None,
-            )?;
+            let font_brush = d2d_context.CreateSolidColorBrush(&style.font_color, None)?;
+            let bg_brush = d2d_context.CreateSolidColorBrush(&style.bg_color, None)?;
 
             let dpi = (scale * 96.0) as f32;
             d2d_context.SetDpi(dpi, dpi);
 
-            // SwapChainをVisualの内容にセット
-            dcomp_visual.SetContent(&swap_chain)?;
-            dcomp_target.SetRoot(&dcomp_visual)?;
             dcomp_device.Commit()?;
 
-            Ok(Self {
+            let renderer = Self {
                 d2d_factory,
                 dw_factory,
                 d2d_context,
                 swap_chain,
-                brush,
+                font_brush,
+                bg_brush,
                 format,
                 dcomp_device,
                 dcomp_visual,
                 dcomp_target,
                 dcomp_effect_group,
-            })
+                current_bg_color: style.bg_color,
+                current_font_size: style.font_size,
+            };
+
+            Ok((renderer, logical_w, logical_h))
         }
     }
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
-    pub fn draw(&self, input_mode: InputMode, width: u32, height: u32) -> anyhow::Result<()> {
+    pub fn draw(
+        &self,
+        input_mode: InputMode,
+        width: f32,
+        height: f32,
+        padding: f32,
+    ) -> anyhow::Result<()> {
         unsafe {
             // 1. SwapChainのバッファをD2Dの描き先に設定
             // 次に書き込むための画用紙（DXGI Surface）を取得
@@ -191,27 +226,34 @@ impl DCompRenderer {
                 .CreateBitmapFromDxgiSurface(&dxgi_surface, Some(&bitmap_props))?;
 
             self.d2d_context.SetTarget(&d2d_bitmap);
-
             // 描画開始
             self.d2d_context.BeginDraw();
             // アンチエイリアス
             self.d2d_context
                 .SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-            // 背景を指定した色で塗りつぶし
+            // 背景を透明でクリア
             self.d2d_context.Clear(Some(&D2D1_COLOR_F {
-                r: 0.2,
-                g: 0.2,
-                b: 0.2,
-                a: 1.0,
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.0,
             }));
 
-            // 背景の形状
+            // 背景を角丸矩形で描画
             let rect = D2D_RECT_F {
                 left: 0.0,
                 top: 0.0,
-                right: width as f32,
-                bottom: height as f32 - 3.0,
+                right: width,
+                bottom: height,
             };
+
+            let rounded_rect = D2D1_ROUNDED_RECT {
+                rect,
+                radiusX: 2.0, // 角丸の半径
+                radiusY: 2.0,
+            };
+            self.d2d_context
+                .FillRoundedRectangle(&rounded_rect, &self.bg_brush);
 
             // 文字列を取得
             // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
@@ -221,12 +263,20 @@ impl DCompRenderer {
                 .chain(std::iter::once(0)) // ヌル終端
                 .collect();
 
+            // paddingを加味した描画領域
+            let text_rect = D2D_RECT_F {
+                left: padding,
+                top: padding,
+                right: width as f32 - padding,
+                bottom: height as f32 - padding,
+            };
+
             // 中央に描画
             self.d2d_context.DrawText(
                 &text,
                 &self.format,
-                &rect,
-                &self.brush,
+                &text_rect,
+                &self.font_brush,
                 D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
                 DWRITE_MEASURING_MODE_NATURAL,
             );
@@ -245,12 +295,90 @@ impl DCompRenderer {
         }
     }
 
-    // 透明度捜査
+    // 透明度操作
     pub fn set_visibility(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
             self.dcomp_effect_group.SetOpacity2(opacity)?;
             self.dcomp_device.Commit()?;
             Ok(())
         }
+    }
+
+    // todo:実際のフォントサイズを計算
+    pub fn calc_metrics(&self, input_mode: InputMode) -> anyhow::Result<(f32, f32)> {
+        unsafe {
+            let text: Vec<u16> = input_mode
+                .as_str()
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            // 無限の大きさを指定して、自然な改行位置を測る
+            let text_layout =
+                self.dw_factory
+                    .CreateTextLayout(&text, &self.format, f32::MAX, f32::MAX)?;
+
+            let mut metrics = std::mem::zeroed();
+            text_layout.GetMetrics(&mut metrics)?;
+
+            // DIP単位での幅と高さが取得できる
+            Ok((metrics.width, metrics.height))
+        }
+    }
+
+    pub fn update_config(&mut self, style: &WindowStyle) -> anyhow::Result<()> {
+        unsafe {
+            // 色の更新
+            self.font_brush.SetColor(&style.font_color);
+            self.bg_brush.SetColor(&style.bg_color);
+            self.current_bg_color = style.bg_color;
+
+            // フォントサイズが変わった場合のみ、TextFormatを再生成
+            if (self.current_font_size - style.font_size).abs() > f32::EPSILON {
+                let new_format = self.dw_factory.CreateTextFormat(
+                    w!("Noto Sans JP"),
+                    None,
+                    DWRITE_FONT_WEIGHT_MEDIUM,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    style.font_size,
+                    w!("ja-jp"),
+                )?;
+
+                new_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+                new_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+
+                self.format = new_format;
+                self.current_font_size = style.font_size;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
+        // サイズがゼロの時はリサイズしない
+        if width == 0 || height == 0 {
+            return Ok(());
+        }
+
+        unsafe {
+            // D2DコンテキストがSwapChainのバッファを掴んだままだと ResizeBuffers が失敗する
+            self.d2d_context.SetTarget(None);
+
+            // バッファのリサイズ
+            self.swap_chain.ResizeBuffers(
+                0, // 0 = 現在のバッファ数(2)を維持
+                width,
+                height,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_SWAP_CHAIN_FLAG(0),
+            )?;
+
+            // DCompのVisualにバッファを再セットし、Commitする
+            self.dcomp_visual.SetContent(&self.swap_chain)?;
+            self.dcomp_device.Commit()?;
+            self.d2d_context.SetTarget(None);
+        }
+        Ok(())
     }
 }
