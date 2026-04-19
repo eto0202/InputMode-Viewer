@@ -1,4 +1,9 @@
-use windows::Win32::Foundation::POINT;
+use windows::Win32::{
+    Foundation::{HWND, POINT},
+    UI::WindowsAndMessaging::GetCursorPos,
+};
+
+use crate::core::sys::win32;
 
 // メモリ上のバイト列から画像をデコードしアイコンを生成
 // アプリケーション内に画像が保存される
@@ -36,4 +41,22 @@ pub fn calc_predicted_potision(
     let predicted_y = current.y + (dy as f32 * k) as i32;
 
     (predicted_x, predicted_y)
+}
+
+// マウス位置の予測
+pub fn set_predicted_position(hwnd: HWND, mouse_x: i32, mouse_y: i32, scale: f64) -> (i32, i32) {
+    // 出力引数
+    let mut current = POINT::default();
+    let _ = unsafe { GetCursorPos(&mut current) }; // 現在のマウス座標
+
+    // 保存しておいた前回からの移動量(速度)を計算
+    let (predicted_x, predicted_y) = calc_predicted_potision(current, mouse_x, mouse_y, 2, 1.6);
+
+    // マウスから少しずらす
+    let offset = 20 * scale as i32;
+
+    let _ = win32::set_window_position(hwnd, predicted_x + offset, predicted_y + offset);
+
+    // 現在のマウス座標を保存
+    (current.x, current.y)
 }

@@ -1,39 +1,4 @@
-use crate::{
-    common::{
-        app_config::{AppConfig, WindowRole, WindowStyle},
-        config,
-    },
-    core::{
-        app::{tray, utils},
-        sys::{
-            renderer::DCompRenderer,
-            uia::{cap::InputCapability, text::InputMode},
-            win32,
-        },
-        window::window::ManagedWindow,
-    },
-    ui,
-};
-use anyhow::Context;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tray_icon::{TrayIcon, menu::MenuEvent};
-use windows::Win32::{
-    Foundation::{HWND, *},
-    UI::WindowsAndMessaging::GetCursorPos,
-};
-use winit::{
-    application::ApplicationHandler,
-    dpi::{LogicalPosition, LogicalSize},
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
-    platform::windows::WindowAttributesExtWindows,
-    window::{Window, WindowAttributes, WindowId},
-};
+use crate::core::app::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -119,7 +84,6 @@ impl ApplicationHandler<Message> for Controller {
         if self.is_visible {
             let managed = self.find_by_role(WindowRole::Floating);
             let window_date = if let Ok(window) = managed {
-                // 必要な値だけコピー
                 let hwnd = window.hwnd;
                 let scale = window.window.scale_factor();
                 window.window.request_redraw();
@@ -130,7 +94,14 @@ impl ApplicationHandler<Message> for Controller {
 
             if let Some((hwnd, scale)) = window_date {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-                self.set_predicted_position(hwnd, scale);
+                let (current_x, current_y) = utils::set_predicted_position(
+                    hwnd,
+                    self.last_raw_mouse_x,
+                    self.last_raw_mouse_y,
+                    scale,
+                );
+                self.last_raw_mouse_x = current_x;
+                self.last_raw_mouse_y = current_y;
             }
         } else {
             event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
@@ -155,18 +126,9 @@ impl ApplicationHandler<Message> for Controller {
                 // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
                 if old_mode != mode {
                     if let Some(renderer) = &self.renderer {
-                        let style =
-                            get_style(self.config.as_ref().unwrap(), WindowRole::Floating).unwrap();
-                        let (w, h) = renderer.calc_metrics(mode).unwrap();
-                        let p = style.padding;
-
-                        let final_size = LogicalSize::new(
-                            (w + p * 2.0).ceil() as f64,
-                            (h + p * 2.0).ceil() as f64,
-                        );
-
-                        let mw = self.find_by_role(WindowRole::Floating).unwrap();
-                        let _ = mw.window.request_inner_size(final_size);
+                        if let Err(e) = self.try_resize(renderer, mode, WindowRole::Floating) {
+                            eprintln!("Resize failed: {}", e);
+                        }
                     }
                 }
             }
@@ -206,7 +168,7 @@ impl Controller {
             self.proxy_window = Some(window);
 
             self.windows = Some(HashMap::new());
-            let _id = self.create_window(el, WindowRole::Floating).unwrap();
+            let _id = self.create_window(el, WindowRole::Floating)?;
             let mw = self.find_by_role(WindowRole::Floating)?;
 
             win32::set_window_style(mw.hwnd)?;
@@ -239,12 +201,10 @@ impl Controller {
         let (mw, renderer) = {
             let renderer = self.renderer.as_ref().context("renderer is missing")?;
             let windows = self.windows.as_mut().context("windows is missing")?;
-
             let mw = windows
                 .values_mut()
                 .find(|w| w.role == WindowRole::Floating)
                 .context("Not found Floating")?;
-
             (mw, renderer)
         };
 
@@ -326,26 +286,6 @@ impl Controller {
         Ok(())
     }
 
-    // マウス位置の予測
-    fn set_predicted_position(&mut self, hwnd: HWND, scale: f64) {
-        // 出力引数
-        let mut current = POINT::default();
-        let _ = unsafe { GetCursorPos(&mut current) }; // 現在のマウス座標
-
-        // 保存しておいた前回からの移動量(速度)を計算
-        let (x, y) = (self.last_raw_mouse_x, self.last_raw_mouse_y);
-        let (predicted_x, predicted_y) = utils::calc_predicted_potision(current, x, y, 2, 1.6);
-
-        // マウスから少しずらす
-        let offset = 20 * scale as i32;
-
-        let _ = win32::set_window_position(hwnd, predicted_x + offset, predicted_y + offset);
-
-        // 現在のマウス座標を保存
-        self.last_raw_mouse_x = current.x;
-        self.last_raw_mouse_y = current.y;
-    }
-
     // ウィンドウ作成と登録
     pub fn create_window(
         &mut self,
@@ -392,17 +332,17 @@ impl Controller {
         let new_data = config::load_config();
         let windows = self.windows.as_mut().context("Windows is missing")?;
 
-        for managed in windows.values_mut() {
+        for mw in windows.values_mut() {
             let cfg = self.config.as_ref().context("Config is missing")?;
-            let style = get_style(cfg, managed.role)?;
+            let style = get_style(cfg, mw.role)?;
 
             // ここに各設定
-            let _enabled = match managed.role {
+            let _enabled = match mw.role {
                 WindowRole::Floating => new_data.floating.enabled,
                 WindowRole::Fixed => new_data.fixed.enabled,
             };
 
-            // 3. Rendererのリソース（色、フォント）を更新
+            // Rendererのリソース（色、フォント）を更新
             if let Some(renderer) = &mut self.renderer {
                 renderer.update_config(&style)?;
 
@@ -413,13 +353,32 @@ impl Controller {
                         (w + padding * 2.0).ceil() as u32,
                         (h + padding * 2.0).ceil() as u32,
                     );
-                    let _ = managed.window.request_inner_size(final_size);
+                    let _ = mw.window.request_inner_size(final_size);
                 }
             }
 
-            managed.window.request_redraw();
+            mw.window.request_redraw();
         }
 
+        Ok(())
+    }
+
+    // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
+    fn try_resize(
+        &self,
+        renderer: &DCompRenderer,
+        mode: InputMode,
+        role: WindowRole,
+    ) -> anyhow::Result<()> {
+        let cfg = self.config.as_ref().context("Config is missing")?;
+        let style = get_style(cfg, WindowRole::Floating).context("No style")?;
+        let (w, h) = renderer.calc_metrics(mode).context("Calc metrics failed")?;
+        let mw = self.find_by_role(role).context("Windows is missing")?;
+
+        let p = style.padding;
+        let final_size = LogicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
+
+        let _ = mw.window.request_inner_size(final_size);
         Ok(())
     }
 }
