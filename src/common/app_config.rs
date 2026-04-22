@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use strum_macros::EnumIter;
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 
@@ -40,7 +41,7 @@ pub struct FixedWindow {
 impl Default for FixedWindow {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true, // 確認用にtrue
             role: WindowRole::Fixed,
             position: WindowPos::Top,
             style: WindowStyle::default(),
@@ -106,7 +107,7 @@ impl Default for WindowStyle {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum WindowRole {
     Fixed,
     Floating,

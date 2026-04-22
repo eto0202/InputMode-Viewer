@@ -4,7 +4,7 @@ pub use crate::{
         config,
     },
     core::{
-        app::{tray, utils},
+        app::{app_core::*, show_state::*, tray, utils},
         sys::{
             renderer::DCompRenderer,
             uia::{cap::InputCapability, text::InputMode},

@@ -296,7 +296,7 @@ impl DCompRenderer {
     }
 
     // 透明度操作
-    pub fn set_visibility(&self, opacity: f32) -> anyhow::Result<()> {
+    pub fn set_opacity(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
             self.dcomp_effect_group.SetOpacity2(opacity)?;
             self.dcomp_device.Commit()?;

@@ -7,24 +7,14 @@ pub enum Message {
     ConfigUpdated,
 }
 
-// 「隠す」「フェードイン中」「表示中」の3つの状態で管理し、アニメーションを実装
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ShowState {
-    Hidden,
-    FadeIn {
-        start_at: Instant,
-        duration: Duration,
-    },
-    Visible,
-}
-
 // 全ての部品
 pub struct Controller {
-    pub tray_icon: Option<TrayIcon>,
-    pub proxy_window: Option<Window>,
-    pub windows: Option<HashMap<WindowId, ManagedWindow>>,
+    pub state: AppState,
+    pub core: Option<AppCore>,
     pub config: Option<Arc<RwLock<AppConfig>>>,
-    pub renderer: Option<DCompRenderer>,
+}
+
+pub struct AppState {
     pub last_cap: InputCapability,
     pub last_mode: InputMode,
     pub is_visible: bool,
@@ -36,17 +26,16 @@ pub struct Controller {
 impl Default for Controller {
     fn default() -> Self {
         Self {
-            tray_icon: None,
-            proxy_window: None,
-            windows: None,
+            state: AppState {
+                last_cap: InputCapability::Unknown,
+                last_mode: InputMode::Unknown,
+                is_visible: false,
+                show_state: ShowState::Hidden,
+                last_raw_mouse_x: 0,
+                last_raw_mouse_y: 0,
+            },
+            core: None,
             config: None,
-            renderer: None,
-            last_cap: InputCapability::Unknown,
-            last_mode: InputMode::Unknown,
-            is_visible: false,
-            show_state: ShowState::Hidden,
-            last_raw_mouse_x: 0,
-            last_raw_mouse_y: 0,
         }
     }
 }
@@ -70,6 +59,9 @@ impl ApplicationHandler<Message> for Controller {
     // メインウィンドウが表示されている間は常に最新のマウス位置を追いかける
     // 非表示の時は何か起きるまで寝て待つ設定にしてCPU消費を抑える
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(core) = self.core.as_mut() else {
+            return;
+        };
         // タスクトレイイベント
         if let Ok(event) = MenuEvent::receiver().try_recv() {
             match event.id.as_ref() {
@@ -81,12 +73,12 @@ impl ApplicationHandler<Message> for Controller {
             }
         }
 
-        if self.is_visible {
-            let managed = self.find_by_role(WindowRole::Floating);
-            let window_date = if let Ok(window) = managed {
-                let hwnd = window.hwnd;
-                let scale = window.window.scale_factor();
-                window.window.request_redraw();
+        if self.state.is_visible {
+            let floating = core.find_by_role(WindowRole::Floating);
+            let window_date = if let Ok(mw) = floating {
+                let hwnd = mw.hwnd;
+                let scale = mw.window.scale_factor();
+                mw.window.request_redraw();
                 Some((hwnd, scale))
             } else {
                 None
@@ -96,12 +88,12 @@ impl ApplicationHandler<Message> for Controller {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
                 let (current_x, current_y) = utils::set_predicted_position(
                     hwnd,
-                    self.last_raw_mouse_x,
-                    self.last_raw_mouse_y,
+                    self.state.last_raw_mouse_x,
+                    self.state.last_raw_mouse_y,
                     scale,
                 );
-                self.last_raw_mouse_x = current_x;
-                self.last_raw_mouse_y = current_y;
+                self.state.last_raw_mouse_x = current_x;
+                self.state.last_raw_mouse_y = current_y;
             }
         } else {
             event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
@@ -111,23 +103,31 @@ impl ApplicationHandler<Message> for Controller {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, msg: Message) {
         match msg {
             Message::Cap(cap) => {
-                self.last_cap = cap;
+                self.state.last_cap = cap;
             }
             Message::Mode(mode) => {
-                let old_mode = self.last_mode;
-                self.last_mode = mode;
+                let old_mode = self.state.last_mode;
+                self.state.last_mode = mode;
 
-                if self.last_cap != InputCapability::No {
-                    self.is_visible = true;
-                    println!("last_cap: {:?}", self.last_cap);
-                    println!("last_mode: {:?}", self.last_mode);
+                if self.state.last_cap != InputCapability::No {
+                    self.state.is_visible = true;
+                    println!("last_cap: {:?}", self.state.last_cap);
+                    println!("last_mode: {:?}", self.state.last_mode);
                 }
 
                 // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
                 if old_mode != mode {
-                    if let Some(renderer) = &self.renderer {
-                        if let Err(e) = self.try_resize(renderer, mode, WindowRole::Floating) {
-                            eprintln!("Resize failed: {}", e);
+                    let (Some(core), Some(cfg)) = (self.core.as_mut(), self.config.as_ref()) else {
+                        return;
+                    };
+
+                    for mw in core.windows.values_mut() {
+                        if let Some(renderer) = &mw.render_stack {
+                            if let Ok(new_size) = AppCore::try_resize(cfg, renderer, mode, mw.role)
+                            {
+                                mw.current_size = new_size;
+                                let _ = mw.window.request_inner_size(new_size);
+                            }
                         }
                     }
                 }
@@ -135,9 +135,9 @@ impl ApplicationHandler<Message> for Controller {
             Message::ConfigUpdated => {
                 let new_data = config::load_config();
 
-                if let Some(con) = &self.config {
+                if let Some(cfg) = &self.config {
                     // 書き込みロックを取得
-                    let mut lock = con.write();
+                    let mut lock = cfg.write();
                     // デリファレンスして中身を丸ごと差し替える
                     *lock = new_data;
                     println!("config updated!");
@@ -152,127 +152,120 @@ impl ApplicationHandler<Message> for Controller {
 
 impl Controller {
     fn handle_resumed(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
-        if self.proxy_window.is_none() {
-            // プロキシウィンドウを作成
-            // メインウィンドウを消した時にアプリ自体が終了してしまうことがあるため
-            // イベントを受け取るための身代わりとして用意
-            let attr = WindowAttributes::default()
-                .with_visible(false)
-                .with_active(false)
-                .with_skip_taskbar(true)
-                .with_decorations(false)
-                .with_max_inner_size(LogicalSize::new(0, 0))
-                .with_position(LogicalPosition::new(0, 0));
+        if self.core.is_some() {
+            return Ok(());
+        }
 
-            let window = el.create_window(attr)?;
-            self.proxy_window = Some(window);
+        let cfg = self
+            .config
+            .as_ref()
+            .context("Config should be loaded at startup")?;
 
-            self.windows = Some(HashMap::new());
-            let _id = self.create_window(el, WindowRole::Floating)?;
-            let mw = self.find_by_role(WindowRole::Floating)?;
+        let core = AppCore::new(el, cfg.clone(), self.state.last_mode)?;
+        self.core = Some(core);
+        println!("AppCore initialized!");
+
+        let Some(core) = self.core.as_mut() else {
+            return Ok(());
+        };
+        // 各ウィンドウを描画
+        for mw in core.windows.values_mut() {
+            let renderer = mw
+                .render_stack
+                .as_mut()
+                .context("Renderer not found on ManagedWindow")?;
+
+            renderer.set_opacity(0.0)?;
+
+            // 設定から有効・無効を取得
+            let is_enabled = {
+                let cfg = cfg.read();
+                match mw.role {
+                    WindowRole::Floating => cfg.floating.enabled,
+                    WindowRole::Fixed => cfg.fixed.enabled,
+                }
+            };
+            mw.window.set_visible(is_enabled);
 
             win32::set_window_style(mw.hwnd)?;
 
-            // DCompRendererを作成
-            // todo: fixedウィンドウを不可視で作成
-            let style = get_style(self.config.as_ref().unwrap(), WindowRole::Floating)?;
-            let (renderer, w, h) =
-                DCompRenderer::new(mw.hwnd, self.last_mode, &style, mw.window.scale_factor())?;
-            renderer.set_visibility(0.0)?;
-
-            // 描画更新
-            let _size = mw.window.request_inner_size(LogicalSize::new(w, h));
+            let _ = mw.window.request_inner_size(mw.current_size);
             mw.window.request_redraw();
-
-            self.renderer = Some(renderer);
-
-            // トレイアイコン
-            self.tray_icon = Some(tray::tray_icon()?);
         }
+
         Ok(())
     }
 
     fn handle_window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        _id: WindowId,
+        el: &ActiveEventLoop,
+        id: WindowId,
         event: WindowEvent,
     ) -> anyhow::Result<()> {
-        let (mw, renderer) = {
-            let renderer = self.renderer.as_ref().context("renderer is missing")?;
-            let windows = self.windows.as_mut().context("windows is missing")?;
-            let mw = windows
-                .values_mut()
-                .find(|w| w.role == WindowRole::Floating)
-                .context("Not found Floating")?;
-            (mw, renderer)
+        let (Some(core), Some(cfg)) = (self.core.as_mut(), self.config.as_ref()) else {
+            return Ok(());
         };
+
+        // プロキシウィンドウのイベントなら無視
+        if id == core.proxy_window.id() {
+            if let WindowEvent::CloseRequested = event {
+                el.exit();
+            }
+            return Ok(());
+        }
+
+        // IDから対象のウィンドウを引く
+        let mw = match core.windows.get_mut(&id) {
+            Some(w) => w,
+            None => return Ok(()), // 予期せぬウィンドウIDなら無視
+        };
+        // ウィンドウが renderer を持っていない場合はスキップ
+        let renderer = mw
+            .render_stack
+            .as_mut()
+            .context("Renderer not found on ManagedWindow")?;
 
         // 表示判定
         match event {
             WindowEvent::RedrawRequested => {
-                let should_show = match self.last_cap {
+                let should_show = match self.state.last_cap {
                     InputCapability::No => false,
-                    InputCapability::Yes => self.last_mode != InputMode::Unknown,
-                    InputCapability::Unknown => self.last_mode.is_on(), // 不明の場合はONの時だけ表示
+                    InputCapability::Yes => self.state.last_mode != InputMode::Unknown,
+                    InputCapability::Unknown => self.state.last_mode.is_on(), // 不明の場合はONの時だけ表示
                 };
 
-                let style = get_style(self.config.as_ref().unwrap(), WindowRole::Floating)?;
-                let p = style.padding;
-                let target_opacity = style.opacity;
+                // ウィンドウのロールに合わせたスタイル取得
+                let style = AppCore::get_style(&cfg, mw.role)?;
+                let (p, target_opacity) = (style.padding, style.opacity);
+                // 現在保持しているサイズを取得
+                let width = mw.current_size.width;
+                let height = mw.current_size.height;
                 // フェードイン時間
                 let fade_duration = Duration::from_millis(160);
 
-                // 現在のウィンドウの「論理サイズ」を取得して描画
-                let scale = mw.window.scale_factor();
-                let logical_size = mw.window.inner_size().to_logical::<f32>(scale);
-                let width = logical_size.width;
-                let height = logical_size.height;
-
                 // フェードイン設定
-                match (should_show, self.show_state) {
+                let (current_opacity, is_animating) =
+                    self.state
+                        .show_state
+                        .update(fade_duration, should_show, target_opacity);
+
+                if should_show {
+                    // 描画と表示
+                    renderer.set_opacity(current_opacity)?;
+                    renderer.draw(self.state.last_mode, width, height, p)?;
+
+                    // アニメーション中のみ再描画を予約
+                    if is_animating {
+                        mw.window.request_redraw();
+                    }
+                } else {
+                    self.state.is_visible = false;
                     // 非表示なら画面外に飛ばし透明に
-                    (false, _) => {
-                        renderer.draw(self.last_mode, width, height, p)?;
-                        win32::set_window_position(mw.hwnd, -10000, -10000)?;
-                        renderer.set_visibility(0.0)?;
-
-                        self.show_state = ShowState::Hidden;
-                        self.is_visible = false;
-                    }
-                    // 以降がフェードイン部分
-                    (true, ShowState::Hidden) => {
-                        renderer.draw(self.last_mode, width, height, p)?;
-                        self.show_state = ShowState::FadeIn {
-                            start_at: Instant::now(),
-                            duration: fade_duration,
-                        };
-                        mw.window.request_redraw();
-                    }
-                    (true, ShowState::FadeIn { start_at, duration }) => {
-                        renderer.draw(self.last_mode, width, height, p)?;
-
-                        let elapsed = start_at.elapsed();
-                        // 経過時間 ÷ 160ミリ秒 で進捗率（0.0〜1.0）を出す。1.0までループし徐々に濃く。
-                        let progress = (elapsed.as_secs_f32() / duration.as_secs_f32()).min(1.0);
-
-                        let current_opacity = progress * target_opacity;
-                        renderer.set_visibility(current_opacity)?;
-
-                        if progress < 1.0 {
-                            mw.window.request_redraw();
-                        } else {
-                            self.show_state = ShowState::Visible;
-                        }
-                    }
-                    (true, ShowState::Visible) => {
-                        renderer.draw(self.last_mode, width, height, p)?;
-                        mw.window.request_redraw();
-                    }
+                    win32::set_window_position(mw.hwnd, -10000, -10000)?;
                 }
             }
             WindowEvent::CloseRequested => {
-                event_loop.exit();
+                el.exit();
             }
             WindowEvent::Resized(physical_size) => {
                 // OSが確実にサイズ変更を完了したタイミング
@@ -286,75 +279,38 @@ impl Controller {
         Ok(())
     }
 
-    // ウィンドウ作成と登録
-    pub fn create_window(
-        &mut self,
-        el: &ActiveEventLoop,
-        role: WindowRole,
-    ) -> anyhow::Result<WindowId> {
-        let managed = {
-            // 設定から該当するスタイルを取得
-            let cfg = self.config.clone().context("Config is missing")?;
-            let style = get_style(&cfg, role)?;
-            ManagedWindow::new(el, role, &*style)?
-        };
-
-        let id = managed.window.id();
-        let windows = self.windows.as_mut().context("Windows is missing")?;
-
-        windows.insert(id, managed);
-
-        Ok(id)
-    }
-
-    // ロール検索 参照
-    pub fn find_by_role(&self, role: WindowRole) -> anyhow::Result<&ManagedWindow> {
-        let windows = self.windows.as_ref().context("Windows is missing")?;
-
-        windows
-            .values()
-            .find(|w| w.role == role)
-            .context("Not find role")
-    }
-
-    // ロール検索 可変参照
-    pub fn find_by_role_mut(&mut self, role: WindowRole) -> anyhow::Result<&mut ManagedWindow> {
-        let windows = self.windows.as_mut().context("Windows is missing")?;
-
-        windows
-            .values_mut()
-            .find(|w| w.role == role)
-            .context("Not find role")
-    }
-
     // 再描画を伝播
     pub fn apply_config_to_all(&mut self) -> anyhow::Result<()> {
+        let core = self.core.as_mut().context("AppCore missing")?;
+        let cfg = self.config.as_ref().context("Config missing")?;
         let new_data = config::load_config();
-        let windows = self.windows.as_mut().context("Windows is missing")?;
 
-        for mw in windows.values_mut() {
-            let cfg = self.config.as_ref().context("Config is missing")?;
-            let style = get_style(cfg, mw.role)?;
+        for mw in core.windows.values_mut() {
+            let renderer = mw
+                .render_stack
+                .as_mut()
+                .context("Renderer not found on ManagedWindow")?;
+            let style = AppCore::get_style(&cfg, mw.role)?;
 
             // ここに各設定
-            let _enabled = match mw.role {
-                WindowRole::Floating => new_data.floating.enabled,
-                WindowRole::Fixed => new_data.fixed.enabled,
+            let is_enabled = {
+                match mw.role {
+                    WindowRole::Floating => new_data.floating.enabled,
+                    WindowRole::Fixed => new_data.fixed.enabled,
+                }
             };
+            mw.window.set_visible(is_enabled);
 
             // Rendererのリソース（色、フォント）を更新
-            if let Some(renderer) = &mut self.renderer {
-                renderer.update_config(&style)?;
-
-                // サイズの再計算とリサイズ
-                if let Ok((w, h)) = renderer.calc_metrics(self.last_mode) {
-                    let padding = style.padding;
-                    let final_size = LogicalSize::new(
-                        (w + padding * 2.0).ceil() as u32,
-                        (h + padding * 2.0).ceil() as u32,
-                    );
-                    let _ = mw.window.request_inner_size(final_size);
-                }
+            renderer.update_config(&style)?;
+            // サイズの再計算とリサイズ
+            if let Ok((w, h)) = renderer.calc_metrics(self.state.last_mode) {
+                let padding = style.padding;
+                let final_size = LogicalSize::new(
+                    (w + padding * 2.0).ceil() as u32,
+                    (h + padding * 2.0).ceil() as u32,
+                );
+                let _ = mw.window.request_inner_size(final_size);
             }
 
             mw.window.request_redraw();
@@ -362,40 +318,4 @@ impl Controller {
 
         Ok(())
     }
-
-    // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
-    fn try_resize(
-        &self,
-        renderer: &DCompRenderer,
-        mode: InputMode,
-        role: WindowRole,
-    ) -> anyhow::Result<()> {
-        let cfg = self.config.as_ref().context("Config is missing")?;
-        let style = get_style(cfg, WindowRole::Floating).context("No style")?;
-        let (w, h) = renderer.calc_metrics(mode).context("Calc metrics failed")?;
-        let mw = self.find_by_role(role).context("Windows is missing")?;
-
-        let p = style.padding;
-        let final_size = LogicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
-
-        let _ = mw.window.request_inner_size(final_size);
-        Ok(())
-    }
-}
-
-// スタイルの取得
-pub fn get_style(
-    cfg: &Arc<RwLock<AppConfig>>,
-    role: WindowRole,
-) -> anyhow::Result<MappedRwLockReadGuard<'_, WindowStyle>> {
-    // ロックを取得
-    let guard = cfg.read();
-
-    // ガードをWindowStyleだけに絞り込む
-    let style = RwLockReadGuard::map(guard, |cfg| match role {
-        WindowRole::Floating => &cfg.floating.style,
-        WindowRole::Fixed => &cfg.fixed.style,
-    });
-
-    Ok(style)
 }
