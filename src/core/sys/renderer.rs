@@ -1,5 +1,6 @@
 use std::f32;
 
+use anyhow::Context;
 use windows::{
     Win32::{
         Foundation::*,
@@ -60,6 +61,8 @@ pub struct DCompRenderer {
     // 現在のスタイルのキャッシュ
     pub current_font_size: f32,
     pub current_bg_color: D2D1_COLOR_F,
+
+    pub waitable_object: HANDLE,
 }
 
 impl DCompRenderer {
@@ -85,6 +88,7 @@ impl DCompRenderer {
                 None,               // 実際に決まった機能レベルの受け取り先
                 None,               // デバイスコンテキストの受け取り先
             )?;
+            println!("1: D3D11 Device OK");
             let d3d_device = d3d_device.unwrap();
             let dxgi_device: IDXGIDevice = d3d_device.cast()?;
 
@@ -147,6 +151,8 @@ impl DCompRenderer {
             let physical_w = (logical_w * scale as f32) as u32;
             let physical_h = (logical_h * scale as f32) as u32;
 
+            println!("2: Size: {}x{}", physical_w, physical_h);
+
             let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
                 Width: physical_w,                  // 画面の幅
                 Height: physical_h,                 // 画面の高さ
@@ -162,14 +168,25 @@ impl DCompRenderer {
                 Scaling: DXGI_SCALING_STRETCH, // ウィンドウサイズが変わった時の引き伸ばし設定
                 SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD, // 最新の高速な画面切り替え方式
                 AlphaMode: DXGI_ALPHA_MODE_PREMULTIPLIED, // 透過ウィンドウにするならこれ
-                Flags: 0,
+                Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
             };
             // CreateSwapChainForCompositionを使っているのは、DirectCompositionと連携するため
             let swap_chain =
                 dxgi_factory.CreateSwapChainForComposition(&d3d_device, &swap_chain_desc, None)?;
 
+            println!("3: SwapChain OK");
+
+            let waitable_object = swap_chain
+                .cast::<IDXGISwapChain2>()?
+                .GetFrameLatencyWaitableObject();
+
+            dxgi_device
+                .cast::<IDXGIDevice1>()?
+                .SetMaximumFrameLatency(1)?;
+
             // SwapChainをVisualの内容にセット
             dcomp_visual.SetContent(&swap_chain)?;
+            println!("4: dcomp_visual SetContent OK");
 
             let font_brush = d2d_context.CreateSolidColorBrush(&style.font_color, None)?;
             let bg_brush = d2d_context.CreateSolidColorBrush(&style.bg_color, None)?;
@@ -178,6 +195,7 @@ impl DCompRenderer {
             d2d_context.SetDpi(dpi, dpi);
 
             dcomp_device.Commit()?;
+            println!("5: Commit OK");
 
             let renderer = Self {
                 d2d_factory,
@@ -193,6 +211,7 @@ impl DCompRenderer {
                 dcomp_effect_group,
                 current_bg_color: style.bg_color,
                 current_font_size: style.font_size,
+                waitable_object,
             };
 
             Ok((renderer, logical_w, logical_h))
@@ -366,13 +385,15 @@ impl DCompRenderer {
             self.d2d_context.SetTarget(None);
 
             // バッファのリサイズ
-            self.swap_chain.ResizeBuffers(
-                0, // 0 = 現在のバッファ数(2)を維持
-                width,
-                height,
-                DXGI_FORMAT_UNKNOWN,
-                DXGI_SWAP_CHAIN_FLAG(0),
-            )?;
+            self.swap_chain
+                .ResizeBuffers(
+                    0, // 0 = 現在のバッファ数(2)を維持
+                    width,
+                    height,
+                    DXGI_FORMAT_UNKNOWN,
+                    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT,
+                )
+                .context("ResizeBuffers Error")?;
 
             // DCompのVisualにバッファを再セットし、Commitする
             self.dcomp_visual.SetContent(&self.swap_chain)?;

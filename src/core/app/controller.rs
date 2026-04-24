@@ -1,3 +1,5 @@
+use windows::Win32::{Foundation::HANDLE, System::Threading::WaitForMultipleObjects};
+
 use crate::core::app::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -78,36 +80,59 @@ impl ApplicationHandler<Message> for Controller {
         if self.state.displayed {
             el.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
+            // 1. 最大数を決めてスタック上に配列を確保
+            const MAX_HANDLES: usize = 64; // とりあえず64
+            let mut handles = [HANDLE::default(); MAX_HANDLES];
+            let mut count = 0;
+
+            for mw in core.windows.values() {
+                if mw.config_enabled && count < MAX_HANDLES {
+                    if let Some(h) = mw.render_stack.as_ref() {
+                        if !h.waitable_object.is_invalid() {
+                            handles[count] = h.waitable_object;
+                            count += 1;
+                        }
+                    }
+                }
+            }
+
+            // どれか一つでも準備ができれば次に進む
+            if count > 0 {
+                unsafe {
+                    // handles[..count] で必要な分だけスライスとして渡す
+                    // これにより内部的に *const HANDLE と count として API に渡されます
+                    let _ = WaitForMultipleObjects(&handles[..count], false, 1000);
+                }
+            }
+
             for mw in core.windows.values() {
                 if !mw.config_enabled {
                     continue;
                 }
-
                 match mw.role {
                     WindowRole::Floating => {
-                        let (current_x, current_y) = utils::set_predicted_position(
+                        let (cx, cy) = utils::set_predicted_position(
                             mw.hwnd,
                             self.state.mx,
                             self.state.my,
                             mw.window.scale_factor(),
                         );
-                        (self.state.mx, self.state.my) = (current_x, current_y);
-                        mw.window.request_redraw();
+                        (self.state.mx, self.state.my) = (cx, cy);
                     }
                     WindowRole::Fixed => {
-                        if let Ok(work_area) = utils::get_work_area(self.state.mx, self.state.my) {
-                            let (current_x, current_y) = utils::calc_fixed_position(
-                                work_area,
-                                mw.l_size.width as u32,
-                                mw.l_size.height as u32,
-                                &core.config.read().fixed.position,
-                                20,
-                            );
-                            (self.state.wx, self.state.wy) = (current_x, current_y);
-                            mw.window.request_redraw();
-                        };
+                        if let Ok((cx, cy)) = utils::calc_fixed_position(
+                            mw.l_size.width,
+                            mw.l_size.height,
+                            &core.config.read().fixed.position,
+                            20,
+                        ) {
+                            let _ = win32::set_window_position(mw.hwnd, cx, cy);
+                            (self.state.wx, self.state.wy) = (cx, cy);
+                        }
                     }
                 }
+                // 再描画をリクエスト（これで RedrawRequested が呼ばれる）
+                mw.window.request_redraw();
             }
         } else {
             el.set_control_flow(winit::event_loop::ControlFlow::Wait);
