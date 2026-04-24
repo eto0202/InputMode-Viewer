@@ -41,7 +41,7 @@ pub struct FixedWindow {
 impl Default for FixedWindow {
     fn default() -> Self {
         Self {
-            enabled: true, // 確認用にtrue
+            enabled: false,
             role: WindowRole::Fixed,
             position: WindowPos::Top,
             style: WindowStyle::default(),

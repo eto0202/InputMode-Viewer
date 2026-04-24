@@ -36,7 +36,14 @@ impl AppCore {
 
             let (r, w, h) =
                 DCompRenderer::new(mw.hwnd, last_mode, &style, mw.window.scale_factor())?;
-            (mw.render_stack, mw.current_size) = (Some(r), LogicalSize::new(w, h));
+            (mw.render_stack, mw.l_size) = (Some(r), LogicalSize::new(w, h));
+
+            let is_enabled = match role {
+                WindowRole::Floating => config.read().floating.enabled,
+                WindowRole::Fixed => config.read().fixed.enabled,
+            };
+
+            mw.config_enabled = is_enabled;
 
             windows.insert(id, mw);
         }

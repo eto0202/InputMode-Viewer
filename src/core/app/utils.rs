@@ -1,9 +1,10 @@
 use windows::Win32::{
-    Foundation::{HWND, POINT},
+    Foundation::{HWND, POINT, RECT},
+    Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint},
     UI::WindowsAndMessaging::GetCursorPos,
 };
 
-use crate::core::sys::win32;
+use crate::{common::app_config::WindowPos, core::sys::win32};
 
 // メモリ上のバイト列から画像をデコードしアイコンを生成
 // アプリケーション内に画像が保存される
@@ -59,4 +60,55 @@ pub fn set_predicted_position(hwnd: HWND, mouse_x: i32, mouse_y: i32, scale: f64
 
     // 現在のマウス座標を保存
     (current.x, current.y)
+}
+
+pub fn get_work_area(cursor_x: i32, cursor_y: i32) -> anyhow::Result<RECT> {
+    unsafe {
+        let pt = POINT {
+            x: cursor_x,
+            y: cursor_y,
+        };
+        // マウス位置にあるモニターを取得（なければプライマリモニター）
+        let hmonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+
+        if GetMonitorInfoW(hmonitor, &mut info).as_bool() {
+            // rcWork がタスクバーを除いた有効領域
+            Ok(info.rcWork)
+        } else {
+            anyhow::bail!("Failed to get monitor info")
+        }
+    }
+}
+
+pub fn calc_fixed_position(
+    work_area: RECT,
+    physical_width: u32,
+    physical_height: u32,
+    position: &WindowPos,
+    margin: i32, // 画面端からの隙間
+) -> (i32, i32) {
+    let wa_width = work_area.right - work_area.left;
+    let wa_height = work_area.bottom - work_area.top;
+
+    let w = physical_width as i32;
+    let h = physical_height as i32;
+
+    let x = match position {
+        WindowPos::Left => work_area.left + margin,
+        WindowPos::Right => work_area.right - w - margin,
+        WindowPos::Top | WindowPos::Bottom => work_area.left + (wa_width - w) / 2, // 中央寄せ
+    };
+
+    let y = match position {
+        WindowPos::Top => work_area.top + margin,
+        WindowPos::Bottom => work_area.bottom - h - margin,
+        WindowPos::Left | WindowPos::Right => work_area.top + (wa_height - h) / 2, // 中央寄せ
+    };
+
+    (x, y)
 }
