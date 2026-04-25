@@ -176,10 +176,10 @@ impl DCompRenderer {
 
             println!("3: SwapChain OK");
 
+            // Vcyncの設定
             let waitable_object = swap_chain
                 .cast::<IDXGISwapChain2>()?
                 .GetFrameLatencyWaitableObject();
-
             dxgi_device
                 .cast::<IDXGIDevice1>()?
                 .SetMaximumFrameLatency(1)?;

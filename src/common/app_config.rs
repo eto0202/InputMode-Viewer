@@ -8,11 +8,11 @@ pub struct AppConfig {
     pub startup: bool,            // タスクスケジューラへの登録(管理者権限の要求)
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ
+    pub active_role: WindowRole,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FloatingWindow {
-    pub enabled: bool,
     pub role: WindowRole,
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
@@ -22,7 +22,6 @@ pub struct FloatingWindow {
 impl Default for FloatingWindow {
     fn default() -> Self {
         Self {
-            enabled: true,
             role: WindowRole::Floating,
             offset: POINT { x: 20, y: 20 },
             style: WindowStyle::default(),
@@ -32,7 +31,6 @@ impl Default for FloatingWindow {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FixedWindow {
-    pub enabled: bool, // 表示切り替え
     pub role: WindowRole,
     pub position: WindowPos, // 表示位置
     pub style: WindowStyle,  // ウィンドウスタイル
@@ -41,7 +39,6 @@ pub struct FixedWindow {
 impl Default for FixedWindow {
     fn default() -> Self {
         Self {
-            enabled: false,
             role: WindowRole::Fixed,
             position: WindowPos::Top,
             style: WindowStyle::default(),
@@ -111,4 +108,10 @@ impl Default for WindowStyle {
 pub enum WindowRole {
     Fixed,
     Floating,
+}
+
+impl Default for WindowRole {
+    fn default() -> Self {
+        Self::Floating
+    }
 }

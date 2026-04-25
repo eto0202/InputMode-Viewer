@@ -1,19 +1,18 @@
-use strum::IntoEnumIterator;
-
 use crate::core::app::prelude::*;
 
 pub struct AppCore {
     pub config: Arc<RwLock<AppConfig>>,
     pub tray_icon: TrayIcon,
     pub proxy_window: Window,
-    pub windows: HashMap<WindowId, ManagedWindow>,
+    pub mw: ManagedWindow,
+    pub renderer: DCompRenderer,
 }
 
 impl AppCore {
     pub fn new(
         el: &ActiveEventLoop,
         config: Arc<RwLock<AppConfig>>,
-        last_mode: InputMode,
+        input_mode: InputMode,
     ) -> anyhow::Result<Self> {
         // プロキシウィンドウを作成
         // メインウィンドウを消した時にアプリ自体が終了してしまうことがあるため
@@ -27,26 +26,14 @@ impl AppCore {
             .with_position(LogicalPosition::new(0, 0));
         let proxy_window = el.create_window(attr)?;
 
-        let mut windows = HashMap::new();
+        let style = AppCore::get_style(&config, config.read().active_role)?;
+        let mut mw = ManagedWindow::new(el, config.read().active_role)?;
 
-        for role in WindowRole::iter() {
-            let style = AppCore::get_style(&config, role)?;
-            let mut mw = ManagedWindow::new(el, role)?;
-            let id = mw.window.id();
+        let (renderer, w, h) =
+            DCompRenderer::new(mw.hwnd, input_mode, &style, mw.window.scale_factor())
+                .expect("DCompRenderer Failed");
 
-            let (r, w, h) =
-                DCompRenderer::new(mw.hwnd, last_mode, &style, mw.window.scale_factor())?;
-            (mw.render_stack, mw.l_size) = (Some(r), LogicalSize::new(w, h));
-
-            let is_enabled = match role {
-                WindowRole::Floating => config.read().floating.enabled,
-                WindowRole::Fixed => config.read().fixed.enabled,
-            };
-
-            mw.config_enabled = is_enabled;
-
-            windows.insert(id, mw);
-        }
+        mw.l_size = LogicalSize::new(w, h);
 
         // トレイアイコン
         let tray_icon = tray::tray_icon()?;
@@ -55,24 +42,9 @@ impl AppCore {
             config,
             tray_icon,
             proxy_window,
-            windows,
+            mw,
+            renderer,
         })
-    }
-
-    // ロール検索 参照
-    pub fn find_by_role(&self, role: WindowRole) -> anyhow::Result<&ManagedWindow> {
-        self.windows
-            .values()
-            .find(|w| w.role == role)
-            .context("Not find role")
-    }
-
-    // ロール検索 可変参照
-    pub fn find_by_role_mut(&mut self, role: WindowRole) -> anyhow::Result<&mut ManagedWindow> {
-        self.windows
-            .values_mut()
-            .find(|w| w.role == role)
-            .context("Not find role")
     }
 
     // モードが変化した時に、ウィンドウサイズを再計算
@@ -97,9 +69,9 @@ impl AppCore {
         role: WindowRole,
     ) -> anyhow::Result<WindowStyle> {
         // ロックを取得
-        let guard = cfg.read();
+        let lock = cfg.read();
         // ガードをWindowStyleだけに絞り込む
-        let style = RwLockReadGuard::map(guard, |cfg| match role {
+        let style = RwLockReadGuard::map(lock, |cfg| match role {
             WindowRole::Floating => &cfg.floating.style,
             WindowRole::Fixed => &cfg.fixed.style,
         });

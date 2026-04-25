@@ -5,12 +5,7 @@ use input_mode_viewer::ui::settings;
 // TODO:
 // モードの表示は入力状態移行時と、無操作状態が指定秒数経過後のみ。
 // フェードアウト
-// 現在の自動消去はバグがあるため修正
-// クールダウンタイムを実装
 // 追従の可変ポーリングのユーザー設定
-// 設定読み込み
-// 設定反映
-// 更新
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();

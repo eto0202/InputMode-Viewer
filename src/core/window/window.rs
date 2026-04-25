@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use crate::common::app_config::WindowRole;
-use crate::core::app::prelude::{DCompRenderer, ShowState};
+use crate::core::app::prelude::{ShowState};
 use crate::core::sys::win32;
 use windows::Win32::Foundation::HWND;
-use winit::dpi::{LogicalSize};
+use winit::dpi::LogicalSize;
 use winit::window::{Window, WindowAttributes};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
@@ -12,10 +12,8 @@ pub struct ManagedWindow {
     pub window: Arc<Window>,
     pub hwnd: HWND,
     pub role: WindowRole,
-    pub render_stack: Option<DCompRenderer>,
     pub show_state: ShowState,
     pub l_size: LogicalSize<f32>,
-    pub config_enabled: bool,
 }
 
 impl ManagedWindow {
@@ -41,10 +39,8 @@ impl ManagedWindow {
             window: window,
             hwnd: hwnd,
             role,
-            render_stack: None,
             show_state: ShowState::Hidden,
             l_size,
-            config_enabled: false,
         })
     }
 }
