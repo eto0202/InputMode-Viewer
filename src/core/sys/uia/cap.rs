@@ -1,14 +1,17 @@
-use crate::core::app::controller::Message;
-use crate::core::sys::hooks::AppEvent;
-use crate::core::sys::uia::com;
-use crate::core::sys::uia::utils::uia_init;
+use crate::core::{
+    app::controller::Message,
+    sys::{
+        hooks::AppEvent,
+        uia::{com, utils::uia_init},
+    },
+};
 use anyhow::Context;
 use std::sync::mpsc;
 use std::thread;
-use windows::Win32::UI::Accessibility::*;
-use windows::Win32::UI::Input::Ime::*;
-use windows::Win32::UI::WindowsAndMessaging::*;
-use windows::core::Interface;
+use windows::{
+    Win32::UI::{Accessibility::*, Input::Ime::*, WindowsAndMessaging::*},
+    core::Interface,
+};
 use winit::event_loop::EventLoopProxy;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
@@ -26,14 +29,10 @@ pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) 
     thread::spawn(move || {
         let _guard = com::ComGuard::new();
 
-        loop {
-            if let Err(e) = run_cap_monitor(&proxy, &rx) {
-                eprintln!("Cap Monitor Error: {:?}. Restarting...", e);
-                thread::sleep(std::time::Duration::from_secs(3));
-            } else {
-                // エラーなしで戻ってきた場合はスレッドを完全に終了
-                break;
-            }
+        // エラーが起きている間はリトライし続ける
+        while let Err(e) = run_cap_monitor(&proxy, &rx) {
+            eprintln!("Cap Monitor Error: {:?}. Restarting...", e);
+            thread::sleep(std::time::Duration::from_secs(3));
         }
     });
 }
@@ -42,9 +41,9 @@ fn run_cap_monitor(
     proxy: &EventLoopProxy<Message>,
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
-    let (uia, cache_request) = uia_init().context("UIA初期化に失敗")?;
-    let mut last_cap = InputCapability::Unknown;
-    let mut last_processed = std::time::Instant::now();
+    let (uia, cache_req) = uia_init().context("UIA初期化に失敗")?;
+    let mut cap = InputCapability::Unknown;
+    let mut processed = std::time::Instant::now();
 
     loop {
         // イベント受信
@@ -53,19 +52,19 @@ fn run_cap_monitor(
         match event {
             AppEvent::CheckRequest => {
                 // デバウンス処理
-                if last_processed.elapsed() < std::time::Duration::from_millis(200) {
+                if processed.elapsed() < std::time::Duration::from_millis(200) {
                     continue;
                 }
                 println!("cap_thread: Event Received");
                 // 入力可能性を取得
-                let current_cap = input_capability(&uia, &cache_request)?;
+                let cur_cap = input_capability(&uia, &cache_req)?;
                 // 前回と違う場合のみ通知
-                if last_cap != current_cap {
-                    proxy.send_event(Message::Cap(current_cap))?;
+                if cap != cur_cap {
+                    proxy.send_event(Message::Cap(cur_cap))?;
                 }
 
-                last_cap = current_cap;
-                last_processed = std::time::Instant::now();
+                cap = cur_cap;
+                processed = std::time::Instant::now();
             }
         }
     }
@@ -89,10 +88,10 @@ fn input_capability(
     };
 
     // 要素が無効化されていないかチェック
-    if let Some(enabled) = unsafe { el.CachedIsEnabled() }.ok() {
-        if !enabled.as_bool() {
-            return Ok(InputCapability::No);
-        }
+    if let Ok(enabled) = unsafe { el.CachedIsEnabled() }
+        && !enabled.as_bool()
+    {
+        return Ok(InputCapability::No);
     }
 
     // TextPatternかTextEditPatternが存在する
@@ -143,8 +142,10 @@ fn input_capability(
 
 // マウスカーソルの形状判定
 fn is_cursor_ibeam() -> bool {
-    let mut info = CURSORINFO::default();
-    info.cbSize = std::mem::size_of::<CURSORINFO>() as u32;
+    let mut info = CURSORINFO {
+        cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+        ..Default::default()
+    };
 
     if unsafe { GetCursorInfo(&mut info) }.is_ok() {
         // カーソルが表示されているかチェック
@@ -186,18 +187,20 @@ fn win32_input_capability() -> InputCapability {
         return InputCapability::No;
     }
 
-    let thread_id = unsafe { GetWindowThreadProcessId(hwnd, None) };
+    let id = unsafe { GetWindowThreadProcessId(hwnd, None) };
 
     // キャレットが存在し、点滅しているか
 
-    let mut info = GUITHREADINFO::default();
-    info.cbSize = std::mem::size_of::<GUITHREADINFO>() as u32;
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
 
-    let is_input_active = (info.flags.0 & (GUI_CARETBLINKING.0 | GUI_INMENUMODE.0)) != 0;
+    let is_active = (info.flags.0 & (GUI_CARETBLINKING.0 | GUI_INMENUMODE.0)) != 0;
 
-    if unsafe { GetGUIThreadInfo(thread_id, &mut info).is_ok() } {
+    if unsafe { GetGUIThreadInfo(id, &mut info).is_ok() } {
         // キャレットが見えていて点滅中
-        if is_input_active || !info.hwndCaret.0.is_null() {
+        if is_active || !info.hwndCaret.0.is_null() {
             // println!("キャレットが見えていて点滅中");
             return InputCapability::Yes;
         }

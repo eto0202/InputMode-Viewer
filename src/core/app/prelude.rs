@@ -10,7 +10,7 @@ pub use crate::{
             uia::{cap::InputCapability, text::InputMode},
             win32,
         },
-        window::window::ManagedWindow,
+        window::managed::ManagedWindow,
     },
     ui,
 };

@@ -1,6 +1,6 @@
-use std::f32;
-
+use crate::{common::app_config::WindowStyle, core::sys::uia::text::InputMode};
 use anyhow::Context;
+use std::f32;
 use windows::{
     Win32::{
         Foundation::*,
@@ -38,7 +38,6 @@ use windows::{
 5.DirectComposition
     描いた絵を「シール」のようにウィンドウにペタッと貼り付けたり、透かしを入れたりする最新の担当。
 */
-use crate::{common::app_config::WindowStyle, core::sys::uia::text::InputMode};
 
 #[derive(Debug)]
 pub struct DCompRenderer {
@@ -68,7 +67,7 @@ pub struct DCompRenderer {
 impl DCompRenderer {
     pub fn new(
         hwnd: HWND,
-        input_mode: InputMode,
+        mode: InputMode,
         style: &WindowStyle,
         scale: f64,
     ) -> anyhow::Result<(Self, f32, f32)> {
@@ -134,7 +133,7 @@ impl DCompRenderer {
             format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
             format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
             // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
-            let text: Vec<u16> = input_mode
+            let text: Vec<u16> = mode
                 .as_str()
                 .encode_utf16()
                 .chain(std::iter::once(0))
@@ -145,17 +144,17 @@ impl DCompRenderer {
             text_layout.GetMetrics(&mut metrics)?;
 
             // パディングを足して正確なスワップチェーンのサイズを算出
-            let logical_w = metrics.width + style.padding * 2.0;
-            let logical_h = metrics.height + style.padding * 2.0;
+            let lw = metrics.width + style.padding * 2.0;
+            let lh = metrics.height + style.padding * 2.0;
 
-            let physical_w = (logical_w * scale as f32) as u32;
-            let physical_h = (logical_h * scale as f32) as u32;
+            let pw = (lw * scale as f32) as u32;
+            let ph = (lh * scale as f32) as u32;
 
-            println!("2: Size: {}x{}", physical_w, physical_h);
+            println!("2: Size: {}x{}", pw, ph);
 
             let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
-                Width: physical_w,                  // 画面の幅
-                Height: physical_h,                 // 画面の高さ
+                Width: pw,                          // 画面の幅
+                Height: ph,                         // 画面の高さ
                 Format: DXGI_FORMAT_B8G8R8A8_UNORM, // 色の並び(Blue, Green, Red, Alpha)
                 Stereo: BOOL(0),                    // 3D立体視にするか（基本0）
                 SampleDesc: DXGI_SAMPLE_DESC {
@@ -214,18 +213,12 @@ impl DCompRenderer {
                 waitable_object,
             };
 
-            Ok((renderer, logical_w, logical_h))
+            Ok((renderer, lw, lh))
         }
     }
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
-    pub fn draw(
-        &self,
-        input_mode: InputMode,
-        width: f32,
-        height: f32,
-        padding: f32,
-    ) -> anyhow::Result<()> {
+    pub fn draw(&self, mode: InputMode, w: f32, h: f32, p: f32) -> anyhow::Result<()> {
         unsafe {
             // 1. SwapChainのバッファをD2Dの描き先に設定
             // 次に書き込むための画用紙（DXGI Surface）を取得
@@ -251,19 +244,15 @@ impl DCompRenderer {
             self.d2d_context
                 .SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             // 背景を透明でクリア
-            self.d2d_context.Clear(Some(&D2D1_COLOR_F {
-                r: 0.0,
-                g: 0.0,
-                b: 0.0,
-                a: 0.0,
-            }));
+            self.d2d_context
+                .Clear(Some(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }));
 
             // 背景を角丸矩形で描画
             let rect = D2D_RECT_F {
                 left: 0.0,
                 top: 0.0,
-                right: width,
-                bottom: height,
+                right: w,
+                bottom: h,
             };
 
             let rounded_rect = D2D1_ROUNDED_RECT {
@@ -276,7 +265,7 @@ impl DCompRenderer {
 
             // 文字列を取得
             // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
-            let text: Vec<u16> = input_mode
+            let text: Vec<u16> = mode
                 .as_str()
                 .encode_utf16()
                 .chain(std::iter::once(0)) // ヌル終端
@@ -284,10 +273,10 @@ impl DCompRenderer {
 
             // paddingを加味した描画領域
             let text_rect = D2D_RECT_F {
-                left: padding,
-                top: padding,
-                right: width as f32 - padding,
-                bottom: height as f32 - padding,
+                left: p,
+                top: p,
+                right: w - p,
+                bottom: h - p,
             };
 
             // 中央に描画
@@ -324,9 +313,9 @@ impl DCompRenderer {
     }
 
     // todo:実際のフォントサイズを計算
-    pub fn calc_metrics(&self, input_mode: InputMode) -> anyhow::Result<(f32, f32)> {
+    pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<(f32, f32)> {
         unsafe {
-            let text: Vec<u16> = input_mode
+            let text: Vec<u16> = mode
                 .as_str()
                 .encode_utf16()
                 .chain(std::iter::once(0))
@@ -354,7 +343,7 @@ impl DCompRenderer {
 
             // フォントサイズが変わった場合のみ、TextFormatを再生成
             if (self.current_font_size - style.font_size).abs() > f32::EPSILON {
-                let new_format = self.dw_factory.CreateTextFormat(
+                let format = self.dw_factory.CreateTextFormat(
                     w!("Noto Sans JP"),
                     None,
                     DWRITE_FONT_WEIGHT_MEDIUM,
@@ -364,19 +353,19 @@ impl DCompRenderer {
                     w!("ja-jp"),
                 )?;
 
-                new_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
-                new_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+                format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+                format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
-                self.format = new_format;
+                self.format = format;
                 self.current_font_size = style.font_size;
             }
         }
         Ok(())
     }
 
-    pub fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
+    pub fn resize(&self, w: u32, h: u32) -> anyhow::Result<()> {
         // サイズがゼロの時はリサイズしない
-        if width == 0 || height == 0 {
+        if w == 0 || h == 0 {
             return Ok(());
         }
 
@@ -388,8 +377,8 @@ impl DCompRenderer {
             self.swap_chain
                 .ResizeBuffers(
                     0, // 0 = 現在のバッファ数(2)を維持
-                    width,
-                    height,
+                    w,
+                    h,
                     DXGI_FORMAT_UNKNOWN,
                     DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT,
                 )

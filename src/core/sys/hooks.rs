@@ -1,16 +1,13 @@
-use std::sync::Mutex;
-use std::sync::OnceLock;
-use std::sync::mpsc::Sender;
-use std::sync::*;
-use std::thread;
-use windows::Win32::Foundation::HINSTANCE;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Foundation::LPARAM;
-use windows::Win32::Foundation::LRESULT;
-use windows::Win32::Foundation::WPARAM;
-use windows::Win32::UI::Accessibility::*;
-use windows::Win32::UI::Input::KeyboardAndMouse::*;
-use windows::Win32::UI::WindowsAndMessaging::*;
+use std::{
+    sync::{Mutex, OnceLock, mpsc::Sender, *},
+    thread,
+};
+use windows::Win32::{
+    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
+    UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+};
+
+use crate::{guard_opt, guard_res};
 
 // Dropガード
 struct HookGuard(HWINEVENTHOOK, HHOOK, HHOOK);
@@ -37,11 +34,9 @@ pub enum AppEvent {
 
 // 通知送信用
 pub fn send_event() {
-    if let Some(sender_mutex) = EVENT_SENDER.get() {
-        if let Ok(tx) = sender_mutex.lock() {
-            let _ = tx.send(AppEvent::CheckRequest);
-        }
-    }
+    let sender_mutex = guard_opt!(EVENT_SENDER.get());
+    let tx = guard_res!(sender_mutex.lock());
+    let _ = tx.send(AppEvent::CheckRequest);
 }
 
 // フォーカス切り替え
@@ -54,11 +49,8 @@ unsafe extern "system" fn win_event_proc(
     _id_event_thread: u32,
     _dw_ms_event_time: u32,
 ) {
-    match event {
-        EVENT_OBJECT_FOCUS => {
-            send_event();
-        }
-        _ => {}
+    if event == EVENT_OBJECT_FOCUS {
+        send_event();
     }
 }
 
@@ -67,7 +59,6 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
     unsafe {
         if n_code >= 0 && w_param.0 == WM_KEYUP as usize {
             let kbd = &*(l_param.0 as *const KBDLLHOOKSTRUCT);
-
             match VIRTUAL_KEY(kbd.vkCode as u16) {
                 VK_KANJI | VK_OEM_AUTO | VK_OEM_ENLW | VK_CAPITAL | VK_CONVERT | VK_NONCONVERT
                 | VK_MODECHANGE | VK_IME_OFF | VK_IME_ON => {

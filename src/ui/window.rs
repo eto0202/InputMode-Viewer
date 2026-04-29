@@ -1,53 +1,53 @@
 use gpui::*;
+use gpui_component::{
+    setting::{SettingGroup, SettingPage, Settings},
+    *,
+};
+use crate::{
+    common::{app_config::AppConfig, config},
+    ui::components::{appearance::appearance, fixed::fixed, floating::floating},
+};
 
-use crate::common::{app_config, config};
+impl Global for AppConfig {}
 
-pub struct SettingsWindow {
-    pub config: app_config::AppConfig,
+impl AppConfig {
+    pub fn global(cx: &App) -> &AppConfig {
+        cx.global::<AppConfig>()
+    }
+
+    pub fn global_mut(cx: &mut App) -> &mut AppConfig {
+        cx.global_mut::<AppConfig>()
+    }
 }
 
+pub struct SettingsWindow {}
+
 impl SettingsWindow {
-    pub fn new(_: &mut Context<Self>) -> Self {
-        Self {
-            config: config::load_config(),
+    pub fn new(_window: &mut Window, cx: &mut App) -> Self {
+        let cfg = config::load_config();
+
+        if !cx.has_global::<AppConfig>() {
+            cx.set_global(cfg);
         }
+        Self {}
     }
 }
 
 impl Render for SettingsWindow {
-    fn render(
-        &mut self,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
-        let con = self.config.clone();
-        div()
-            .flex()
-            .flex_col()
-            .size_full()
-            .bg(rgb(0x2e2e2e))
-            .p_4()
-            .child(div().child("設定").mb_4())
-            .child(div().child(format!(
-                "現在のフォントサイズ: {}",
-                con.fixed.style.font_size
-            )))
-            .child(
-                button("save")
-                    .child("保存して適用")
-                    .on_click(move |_, _, cx| {
-                        let _ = config::save_config(&con);
-                        cx.quit();
-                    }),
-            )
+    fn render(&mut self, _: &mut gpui::Window, _: &mut Context<Self>) -> impl IntoElement {
+        Settings::new("app-config")
+            .with_group_variant(group_box::GroupBoxVariant::Outline)
+            .sidebar_width(px(180.0))
+            .pages(vec![
+                // ページ（左側のサイドバーメニュー）
+                SettingPage::new("General")
+                    .default_open(true)
+                    .groups(vec![
+                        // グループ（メイン領域のセクション）
+                        SettingGroup::new().title("Appearance").items(appearance()),
+                        SettingGroup::new().title("Fixed").items(fixed()),
+                        SettingGroup::new().title("Floating").items(floating()),
+                    ]),
+            ])
     }
-}
-
-fn button(id: impl Into<ElementId>) -> Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .bg(rgb(0x4a4a4a))
-        .hover(|s| s.bg(rgb(0x5a5a5a)))
-        .p_2()
-        .cursor_pointer()
 }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::common::app_config::WindowRole;
-use crate::core::app::prelude::{ShowState};
+use crate::core::app::prelude::ShowState;
 use crate::core::sys::win32;
 use windows::Win32::Foundation::HWND;
 use winit::dpi::LogicalSize;
@@ -33,11 +33,9 @@ impl ManagedWindow {
         let window = Arc::new(el.create_window(attr)?);
         let hwnd = win32::get_hwnd(&window)?;
 
-        win32::set_window_style(hwnd)?;
-
         Ok(Self {
-            window: window,
-            hwnd: hwnd,
+            window,
+            hwnd,
             role,
             show_state: ShowState::Hidden,
             l_size,

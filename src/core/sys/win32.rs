@@ -1,32 +1,23 @@
 use anyhow::*;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::*;
-use windows::Win32::Graphics::Dwm::{
-    DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+use windows::Win32::{
+    Foundation::*,
+    Graphics::Dwm::{
+        DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+    },
+    UI::{Controls::MARGINS, WindowsAndMessaging::*},
 };
-use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::WindowsAndMessaging::*;
 use windows_core::BOOL;
 
 // ウィンドウの位置指定
-pub fn set_window_position(hwnd: HWND, predicted_x: i32, predicted_y: i32) -> anyhow::Result<()> {
+pub fn set_window_position(hwnd: HWND, x: i32, y: i32) -> anyhow::Result<()> {
     // SWP_NOACTIVATE: フォーカスを奪わない
     // SWP_NOSIZE: サイズは変えない
     // SWP_ASYNCWINDOWPOS: スレッドをブロックせずに座標を送る
     // SWP_NOCOPYBITS: 描画バッファのコピーをスキップ（DCompなので不要）
     let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_NOCOPYBITS;
 
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            predicted_x,
-            predicted_y,
-            0,
-            0,
-            uflags,
-        )?
-    };
+    unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, 0, 0, uflags)? };
     Ok(())
 }
 

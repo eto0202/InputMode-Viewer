@@ -1,15 +1,16 @@
+use crate::{core::sys::win32, ui::window};
 use gpui::*;
+use gpui_component::Root;
+use gpui_component_assets::Assets;
 use windows::Win32::{
     Foundation::CloseHandle,
-    System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
 };
 use windows::Win32::{
     Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE},
     System::Threading::CreateMutexW,
 };
 use windows_core::PCWSTR;
-
-use crate::{core::sys::win32, ui::window};
 
 pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     // ユニークな名前でMutexを作成
@@ -29,17 +30,25 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     let options = WindowOptions {
         focus: true,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
-            origin: Point::new(px(500.0), px(500.0)),
-            size: size(px(400.0), px(500.0)),
+            // ウィンドウ位置
+            // TODO: モニターサイズからトレイメニュー付近を指定
+            // TODO: 最終位置を記憶
+            origin: Point::new(px(700.0), px(250.0)),
+            size: size(px(800.0), px(600.0)),
         })),
+        window_min_size: Some(size(px(600.0), px(400.0))),
         ..Default::default()
     };
 
-    Application::new().run(move |app| {
-        if let Ok(handle) = app.open_window(options, |_, app| app.new(window::SettingsWindow::new))
-        {
-            let _ = handle.update(app, |_, window, _| {
-                let hwnd = win32::get_hwnd(&window).ok()?;
+    Application::new().with_assets(Assets).run(move |cx| {
+        gpui_component::init(cx);
+
+        if let Ok(handle) = cx.open_window(options, |w, cx| {
+            let v = cx.new(|cx| window::SettingsWindow::new(w, cx));
+            cx.new(|cx| Root::new(v, w, cx))
+        }) {
+            let _ = handle.update(cx, |_, w, _| {
+                let hwnd = win32::get_hwnd(&w).ok()?;
                 win32::set_always_on_top(hwnd, true).ok()?;
                 Some(())
             });
@@ -59,10 +68,7 @@ fn spawn_parent_monitor(parent_pid: u32) {
                     // プロセスが終了していないかチェック
                     let mut exit_code: u32 = 0;
                     // 259 = STILL_ACTIVE
-                    if windows::Win32::System::Threading::GetExitCodeProcess(h, &mut exit_code)
-                        .is_err()
-                        || exit_code != 259
-                    {
+                    if GetExitCodeProcess(h, &mut exit_code).is_err() || exit_code != 259 {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(500));

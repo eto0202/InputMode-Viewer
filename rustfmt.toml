@@ -1,0 +1,22 @@
+# 全体の幅
+max_width = 100
+
+# 【ここが最重要】 if return を一行に収めるための設定
+# if文の合計文字数がこの数値以下なら一行にめます
+single_line_if_else_max_width = 50
+
+# 0 にすると常に複数行
+# 小さな数値（20とか）にすると、本当に短い構造体だけ一行に
+struct_lit_width = 30
+struct_variant_width = 30
+
+# おまけ：配列も一行にしたくない場合は 0 に
+array_width = 30
+
+# インポートを整理（std を先に、外部クレートを後に）
+group_imports = "StdExternalCrate"
+# インポートを常にグループ化してマージする
+imports_granularity = "Crate"
+
+# 構造体のフィールドなどをきれいに並べる
+struct_field_align_threshold = 20

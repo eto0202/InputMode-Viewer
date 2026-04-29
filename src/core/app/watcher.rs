@@ -17,10 +17,10 @@ pub fn spawn_config_watcher(
     std::fs::create_dir_all(&parent_dir)?;
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, Error>| match res {
-        Ok(event) => {
+        Ok(e) => {
             // config.tomlが含まれているかチェック
-            if event.paths.iter().any(|p| p.ends_with("config.toml")) {
-                match event.kind {
+            if e.paths.iter().any(|p| p.ends_with("config.toml")) {
+                match e.kind {
                     EventKind::Modify(_) | EventKind::Create(_) => {
                         let _ = proxy.send_event(Message::ConfigUpdated);
                     }

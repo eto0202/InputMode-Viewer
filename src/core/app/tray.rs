@@ -3,20 +3,27 @@ use tray_icon::{
     menu::{Menu, MenuItem},
 };
 
+use crate::core::app::utils;
+
 pub const ID_QUIT: &str = "Quit";
 pub const ID_SETTING: &str = "Setting";
 
 pub fn tray_icon() -> anyhow::Result<TrayIcon> {
-    let tray_menu = Menu::new();
+    let menu = Menu::new();
 
-    let settings_item = MenuItem::with_id(ID_SETTING, "Setting", true, None);
-    let quit_item = MenuItem::with_id(ID_QUIT, "Quit", true, None);
+    let settings = MenuItem::with_id(ID_SETTING, "Setting", true, None);
+    let quit = MenuItem::with_id(ID_QUIT, "Quit", true, None);
 
-    tray_menu.append(&settings_item)?;
-    tray_menu.append(&quit_item)?;
+    menu.append(&settings)?;
+    menu.append(&quit)?;
+
+    // コンパイル時に画像をバイナリに取り込む
+    let img_bytes = include_bytes!("../../icon.png");
+    let icon = utils::load_icon(img_bytes);
 
     let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
+        .with_icon(icon)
+        .with_menu(Box::new(menu))
         .with_tooltip("Input Mode Viewer")
         .build()?;
 

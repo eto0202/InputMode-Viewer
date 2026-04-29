@@ -16,7 +16,7 @@ impl ShowState {
         &mut self,
         fade_duration: Duration,
         should_show: bool,
-        target_opacity: f32,
+        opacity: f32,
     ) -> (f32, bool) {
         match (should_show, &self) {
             // 非表示にすべき時
@@ -39,19 +39,19 @@ impl ShowState {
                 let elapsed = start_at.elapsed();
                 // 経過時間 ÷ 指定ミリ秒 で進捗率（0.0〜1.0）を出す。1.0までループし徐々に濃く。
                 let progress = (elapsed.as_secs_f32() / duration.as_secs_f32()).min(1.0);
-                let current_opacity = progress * target_opacity;
+                let cur_opacity = progress * opacity;
 
                 if progress >= 1.0 {
                     *self = ShowState::Visible;
-                    (target_opacity, false) // 完了
+                    (opacity, false) // 完了
                 } else {
-                    (current_opacity, true) // まだ途中なので再描画が必要
+                    (cur_opacity, true) // まだ途中なので再描画が必要
                 }
             }
 
             // すでに表示中
             (true, ShowState::Visible) => {
-                (target_opacity, false) // 目標の透明度、アニメーションはしていない
+                (opacity, false) // 目標の透明度、アニメーションはしていない
             }
         }
     }

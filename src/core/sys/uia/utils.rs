@@ -1,10 +1,10 @@
-use crate::core::sys::uia::text::InputMode;
+use crate::{core::sys::uia::text::InputMode, skip_err};
 use anyhow::Context;
-use std::sync::Mutex;
-use std::sync::OnceLock;
-use windows::Win32::System::Com::CLSCTX_ALL;
-use windows::Win32::System::Com::CoCreateInstance;
-use windows::Win32::UI::Accessibility::*;
+use std::sync::{Mutex, OnceLock};
+use windows::Win32::{
+    System::Com::{CLSCTX_ALL, CoCreateInstance},
+    UI::Accessibility::*,
+};
 
 // アプリ全体で共有されるUIA初期化用の鍵
 //  UIAの初期化は、複数のスレッドで同時に行うとクラッシュしたりバグったりするらしい
@@ -29,42 +29,42 @@ pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> 
 
 fn create_cache_request(uia: &IUIAutomation) -> anyhow::Result<IUIAutomationCacheRequest> {
     unsafe {
-        let cache_request = uia
+        let cache_req = uia
             .CreateCacheRequest()
             .context("Failed CreateCacheRequest")?;
 
         // RawViewに設定し、すべての要素を無視せず表示
         // これを設定しないとInnerTextBlockが無視される
-        cache_request
+        cache_req
             .SetTreeFilter(&uia.RawViewCondition()?)
             .context("Failed SetTreeFilter")?;
 
         // 取得したいプロパティ
         // 探索用
-        cache_request.AddProperty(UIA_NamePropertyId)?;
-        cache_request.AddProperty(UIA_AutomationIdPropertyId)?;
-        cache_request.AddProperty(UIA_IsOffscreenPropertyId)?;
-        cache_request.AddProperty(UIA_RuntimeIdPropertyId)?;
+        cache_req.AddProperty(UIA_NamePropertyId)?;
+        cache_req.AddProperty(UIA_AutomationIdPropertyId)?;
+        cache_req.AddProperty(UIA_IsOffscreenPropertyId)?;
+        cache_req.AddProperty(UIA_RuntimeIdPropertyId)?;
         // 入力判定用
-        cache_request.AddProperty(UIA_IsEnabledPropertyId)?;
-        cache_request.AddProperty(UIA_ControlTypePropertyId)?;
-        cache_request.AddPattern(UIA_TextPatternId)?;
-        cache_request.AddPattern(UIA_TextEditPatternId)?;
-        cache_request.AddPattern(UIA_ValuePatternId)?;
+        cache_req.AddProperty(UIA_IsEnabledPropertyId)?;
+        cache_req.AddProperty(UIA_ControlTypePropertyId)?;
+        cache_req.AddPattern(UIA_TextPatternId)?;
+        cache_req.AddPattern(UIA_TextEditPatternId)?;
+        cache_req.AddPattern(UIA_ValuePatternId)?;
 
         // 検索範囲
-        cache_request
+        cache_req
             .SetTreeScope(TreeScope_Element)
             .context("Failed SetTreeScope")?;
 
-        Ok(cache_request)
+        Ok(cache_req)
     }
 }
 
 // キャッシュされたUIA要素リストから指定のIDのIUIAutomationElementを取得
 pub fn find_element(
     array: &IUIAutomationElementArray,
-    target_id: &'static str,
+    id: &'static str,
 ) -> anyhow::Result<IUIAutomationElement> {
     unsafe {
         // 早期リターン
@@ -73,7 +73,7 @@ pub fn find_element(
             // 早期リターン
             let el = array.GetElement(i)?;
 
-            if crate::skip_err!(el.CachedAutomationId()).to_string() != target_id {
+            if skip_err!(el.CachedAutomationId()) != id {
                 continue;
             }
 
@@ -91,27 +91,4 @@ pub fn find_element(
 
         Err(anyhow::anyhow!("Element Not Available"))
     }
-}
-
-// 失敗したらcontinueするマクロたち
-// Result
-#[macro_export]
-macro_rules! skip_err {
-    ($res:expr) => {
-        match $res {
-            Ok(val) => val,
-            Err(_) => continue,
-        }
-    };
-}
-
-// Option
-#[macro_export]
-macro_rules! skip_none {
-    ($opt:expr) => {
-        match $opt {
-            Some(val) => val,
-            None => continue,
-        }
-    };
 }

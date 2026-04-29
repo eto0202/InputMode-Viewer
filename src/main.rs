@@ -1,11 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use input_mode_viewer::core::logic;
-use input_mode_viewer::ui::settings;
-
-// TODO:
-// モードの表示は入力状態移行時と、無操作状態が指定秒数経過後のみ。
-// フェードアウト
-// 追従の可変ポーリングのユーザー設定
+use input_mode_viewer::{core::logic, ui::settings};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();

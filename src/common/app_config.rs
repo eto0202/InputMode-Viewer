@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
-use strum_macros::EnumIter;
-use windows::Win32::Foundation::POINT;
-use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
+use strum_macros::{AsRefStr, EnumIter, EnumString};
+use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AppConfig {
@@ -63,8 +62,9 @@ struct D2d1ColorFDef {
     a: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, AsRefStr, EnumString)]
 pub enum WindowPos {
+    #[default]
     Top,
     Bottom,
     Left,
@@ -94,24 +94,26 @@ impl Default for WindowStyle {
                 b: 0.95,
                 a: 1.0,
             },
-            bg_color: D2D1_COLOR_F {
-                r: 0.2,
-                g: 0.2,
-                b: 0.2,
-                a: 1.0,
-            },
+            bg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[derive(
+    Default,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    EnumIter,
+    AsRefStr,
+    EnumString,
+)]
 pub enum WindowRole {
+    #[default]
     Fixed,
     Floating,
-}
-
-impl Default for WindowRole {
-    fn default() -> Self {
-        Self::Floating
-    }
 }

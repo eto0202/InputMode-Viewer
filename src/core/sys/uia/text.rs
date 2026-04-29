@@ -1,12 +1,13 @@
-pub const GLYPH_HIRAGANA: &'static str = "\u{e986}";
-pub const GLYPH_HALF_ALPHA_1: &'static str = "\u{e97e}";
-pub const GLYPH_HALF_ALPHA_2: &'static str = "\u{e982}";
-pub const GLYPH_FULL_KATAKANA: &'static str = "\u{e987}";
-pub const GLYPH_FULL_ALPHA: &'static str = "\u{e981}";
-pub const GLYPH_HALF_KATAKANA: &'static str = "\u{e988}";
+pub const GLYPH_HIRAGANA: &str = "\u{e986}";
+pub const GLYPH_HALF_ALPHA_1: &str = "\u{e97e}";
+pub const GLYPH_HALF_ALPHA_2: &str = "\u{e982}";
+pub const GLYPH_FULL_KATAKANA: &str = "\u{e987}";
+pub const GLYPH_FULL_ALPHA: &str = "\u{e981}";
+pub const GLYPH_HALF_KATAKANA: &str = "\u{e988}";
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
+    #[default]
     Unknown,
     Hiragana,
     HalfAlpha,
@@ -17,7 +18,7 @@ pub enum InputMode {
 
 impl InputMode {
     pub fn new() -> Self {
-        InputMode::Unknown
+        InputMode::default()
     }
 
     // グリフからModeを取得

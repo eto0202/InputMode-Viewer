@@ -12,16 +12,15 @@ use crate::{
     },
 };
 use parking_lot::RwLock;
-use std::sync::Arc;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub fn run() -> anyhow::Result<()> {
     // 設定の初期ロード
-    let config = Arc::new(RwLock::new(config::load_config()));
+    let cfg = Arc::new(RwLock::new(config::load_config()));
 
-    let event_loop = EventLoop::<controller::Message>::with_user_event().build()?;
-    let proxy = event_loop.create_proxy();
+    let el = EventLoop::<controller::Message>::with_user_event().build()?;
+    let proxy = el.create_proxy();
 
     let (tx_uia, rx_uia) = mpsc::channel();
     let (tx_input, rx_input) = mpsc::channel();
@@ -29,9 +28,9 @@ pub fn run() -> anyhow::Result<()> {
 
     // ディスパッチャー
     std::thread::spawn(move || -> anyhow::Result<()> {
-        while let Ok(event) = rx_hooks.recv() {
-            tx_uia.send(event.clone())?;
-            tx_input.send(event.clone())?;
+        while let Ok(e) = rx_hooks.recv() {
+            tx_uia.send(e)?;
+            tx_input.send(e)?;
         }
         Ok(())
     });
@@ -45,13 +44,13 @@ pub fn run() -> anyhow::Result<()> {
     let proxy_watcher = proxy.clone();
     let _watcher = spawn_config_watcher(proxy_watcher)?;
 
-    event_loop.set_control_flow(ControlFlow::Wait);
+    el.set_control_flow(ControlFlow::Wait);
 
     let mut app = controller::Controller {
-        config: Some(Arc::clone(&config)),
+        cfg: Some(Arc::clone(&cfg)),
         ..Default::default()
     };
 
-    event_loop.run_app(&mut app).unwrap();
+    el.run_app(&mut app).unwrap();
     Ok(())
 }

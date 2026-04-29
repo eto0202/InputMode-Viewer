@@ -1,7 +1,7 @@
 use crate::core::app::prelude::*;
 
 pub struct AppCore {
-    pub config: Arc<RwLock<AppConfig>>,
+    pub cfg: Arc<RwLock<AppConfig>>,
     pub tray_icon: TrayIcon,
     pub proxy_window: Window,
     pub mw: ManagedWindow,
@@ -11,8 +11,8 @@ pub struct AppCore {
 impl AppCore {
     pub fn new(
         el: &ActiveEventLoop,
-        config: Arc<RwLock<AppConfig>>,
-        input_mode: InputMode,
+        cfg: Arc<RwLock<AppConfig>>,
+        mode: InputMode,
     ) -> anyhow::Result<Self> {
         // プロキシウィンドウを作成
         // メインウィンドウを消した時にアプリ自体が終了してしまうことがあるため
@@ -22,16 +22,16 @@ impl AppCore {
             .with_active(false)
             .with_skip_taskbar(true)
             .with_decorations(false)
-            .with_max_inner_size(LogicalSize::new(0, 0))
+            .with_max_inner_size(LogicalSize::new(1, 1))
             .with_position(LogicalPosition::new(0, 0));
         let proxy_window = el.create_window(attr)?;
 
-        let style = AppCore::get_style(&config, config.read().active_role)?;
-        let mut mw = ManagedWindow::new(el, config.read().active_role)?;
+        let style = AppCore::get_style(&cfg, cfg.read().active_role)?;
+        let mut mw = ManagedWindow::new(el, cfg.read().active_role)?;
+        win32::set_window_style(mw.hwnd)?;
 
-        let (renderer, w, h) =
-            DCompRenderer::new(mw.hwnd, input_mode, &style, mw.window.scale_factor())
-                .expect("DCompRenderer Failed");
+        let (renderer, w, h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
+            .expect("DCompRenderer Failed");
 
         mw.l_size = LogicalSize::new(w, h);
 
@@ -39,7 +39,7 @@ impl AppCore {
         let tray_icon = tray::tray_icon()?;
 
         Ok(Self {
-            config,
+            cfg,
             tray_icon,
             proxy_window,
             mw,

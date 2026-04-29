@@ -1,6 +1,5 @@
 use anyhow::Context;
-use std::os::windows::process::CommandExt;
-use std::process::Command;
+use std::{os::windows::process::CommandExt, process::Command};
 
 // Windowsのプロセス作成フラグ
 const CREATE_NO_WINDOW: u32 = 0x08000000;
