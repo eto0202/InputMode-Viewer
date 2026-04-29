@@ -18,7 +18,7 @@ use windows::{
                 DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_MEASURING_MODE_NATURAL,
                 DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_CENTER,
-                DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat,
+                DWRITE_TEXT_METRICS, DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat,
             },
             Dxgi::{Common::*, *},
         },
@@ -71,7 +71,8 @@ impl DCompRenderer {
         style: &WindowStyle,
         scale: f64,
     ) -> anyhow::Result<(Self, f32, f32)> {
-        unsafe {
+        // グラフィックスの基盤（D3D, DXGI, D2D）
+        let (d3d_device, dxgi_device, dxgi_factory, d2d_factory, d2d_context) = unsafe {
             // D3D11 Deviceの作成
             // 全ての基盤となるGPUとの対話窓口
             // D3D11_CREATE_DEVICE_BGRA_SUPPORTがないと、後でDirect2Dを繋げようとした時にエラーで落ちる
@@ -87,10 +88,12 @@ impl DCompRenderer {
                 None,               // 実際に決まった機能レベルの受け取り先
                 None,               // デバイスコンテキストの受け取り先
             )?;
-            println!("1: D3D11 Device OK");
+
             let d3d_device = d3d_device.unwrap();
             let dxgi_device: IDXGIDevice = d3d_device.cast()?;
-
+            // DXGISwapChain(Flip Model)の作成
+            // 描画結果を画面に送り出すためのダブルバッファ
+            let dxgi_factory: IDXGIFactory2 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))?;
             // D2D Deviceの作成
             // D3D11の上で動作する、2D描画（ベクターグラフィックス）用のインターフェース
             let d2d_factory: ID2D1Factory1 =
@@ -98,24 +101,38 @@ impl DCompRenderer {
             let d2d_device = d2d_factory.CreateDevice(&dxgi_device)?;
             let d2d_context = d2d_device.CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)?;
 
-            // DXGISwapChain(Flip Model)の作成
-            // 描画結果を画面に送り出すためのダブルバッファ
-            let dxgi_factory: IDXGIFactory2 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))?;
+            println!("Graphics Foundation (D3D, DXGI, D2D) OK");
+            (
+                d3d_device,
+                dxgi_device,
+                dxgi_factory,
+                d2d_factory,
+                d2d_context,
+            )
+        };
 
+        // ウィンドウ合成系（DirectComposition）
+        let (dcomp_device, dcomp_target, dcomp_visual, dcomp_effect_group) = unsafe {
             // DirectCompositionのセットアップ
             let dcomp_device: IDCompositionDevice = DCompositionCreateDevice(&dxgi_device)?;
             // 特定のウィンドウを描画対象に
             let dcomp_target = dcomp_device.CreateTargetForHwnd(hwnd, BOOL(1).as_bool())?;
             // 描画されるレイヤー。ここにswap_chainをセット
             let dcomp_visual = dcomp_device.CreateVisual()?;
-
             // エフェクトグループを作成
             // 透明度などを制御するための入れ物
             let dcomp_effect_group = dcomp_device.CreateEffectGroup()?;
             // Visual にエフェクトを紐付ける（初期値は不透明度 1.0 にしておく）
             dcomp_visual.SetEffect(&dcomp_effect_group)?;
             dcomp_target.SetRoot(&dcomp_visual)?;
+            
+            println!("DirectComposition OK");
 
+            (dcomp_device, dcomp_target, dcomp_visual, dcomp_effect_group)
+        };
+
+        // 文字.フォント系（DirectWrite）
+        let (dw_factory, format, lw, lh) = unsafe {
             // テキスト作成
             let dw_factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
             // テキストのフォントやサイズ、整列などの定義
@@ -129,9 +146,9 @@ impl DCompRenderer {
                 style.font_size,    // フォントサイズ（DIP単位）
                 w!("ja-jp"),        // 言語
             )?;
-
             format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
             format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+
             // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
             let text: Vec<u16> = mode
                 .as_str()
@@ -140,17 +157,22 @@ impl DCompRenderer {
                 .collect();
             let text_layout = dw_factory.CreateTextLayout(&text, &format, f32::MAX, f32::MAX)?;
 
-            let mut metrics = std::mem::zeroed();
+            let mut metrics: DWRITE_TEXT_METRICS = Default::default();
             text_layout.GetMetrics(&mut metrics)?;
 
             // パディングを足して正確なスワップチェーンのサイズを算出
             let lw = metrics.width + style.padding * 2.0;
             let lh = metrics.height + style.padding * 2.0;
+            
+            println!("Typography (DirectWrite) OK");
 
+            (dw_factory, format, lw, lh)
+        };
+
+        // 画面出力系（SwapChain, Brushes）
+        let (swap_chain, waitable_object, font_brush, bg_brush) = unsafe {
             let pw = (lw * scale as f32) as u32;
             let ph = (lh * scale as f32) as u32;
-
-            println!("2: Size: {}x{}", pw, ph);
 
             let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
                 Width: pw,                          // 画面の幅
@@ -169,11 +191,11 @@ impl DCompRenderer {
                 AlphaMode: DXGI_ALPHA_MODE_PREMULTIPLIED, // 透過ウィンドウにするならこれ
                 Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
             };
+
             // CreateSwapChainForCompositionを使っているのは、DirectCompositionと連携するため
             let swap_chain =
                 dxgi_factory.CreateSwapChainForComposition(&d3d_device, &swap_chain_desc, None)?;
 
-            println!("3: SwapChain OK");
 
             // Vcyncの設定
             let waitable_object = swap_chain
@@ -185,43 +207,46 @@ impl DCompRenderer {
 
             // SwapChainをVisualの内容にセット
             dcomp_visual.SetContent(&swap_chain)?;
-            println!("4: dcomp_visual SetContent OK");
 
             let font_brush = d2d_context.CreateSolidColorBrush(&style.font_color, None)?;
             let bg_brush = d2d_context.CreateSolidColorBrush(&style.bg_color, None)?;
 
             let dpi = (scale * 96.0) as f32;
             d2d_context.SetDpi(dpi, dpi);
+            
+            println!("Presentation (SwapChain, Brushes) OK");
 
-            dcomp_device.Commit()?;
-            println!("5: Commit OK");
+            (swap_chain, waitable_object, font_brush, bg_brush)
+        };
 
-            let renderer = Self {
-                d2d_factory,
-                dw_factory,
-                d2d_context,
-                swap_chain,
-                font_brush,
-                bg_brush,
-                format,
-                dcomp_device,
-                dcomp_visual,
-                dcomp_target,
-                dcomp_effect_group,
-                current_bg_color: style.bg_color,
-                current_font_size: style.font_size,
-                waitable_object,
-            };
+        unsafe { dcomp_device.Commit() }?;
+        println!("Commit OK");
 
-            Ok((renderer, lw, lh))
-        }
+        let renderer = Self {
+            d2d_factory,
+            dw_factory,
+            d2d_context,
+            swap_chain,
+            font_brush,
+            bg_brush,
+            format,
+            dcomp_device,
+            dcomp_visual,
+            dcomp_target,
+            dcomp_effect_group,
+            current_bg_color: style.bg_color,
+            current_font_size: style.font_size,
+            waitable_object,
+        };
+
+        Ok((renderer, lw, lh))
     }
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
     pub fn draw(&self, mode: InputMode, w: f32, h: f32, p: f32) -> anyhow::Result<()> {
+        // SwapChainのバッファをD2Dの描き先に設定
+        // 次に書き込むための画用紙（DXGI Surface）を取得
         unsafe {
-            // 1. SwapChainのバッファをD2Dの描き先に設定
-            // 次に書き込むための画用紙（DXGI Surface）を取得
             let dxgi_surface: IDXGISurface = self.swap_chain.GetBuffer(0)?;
 
             let bitmap_props = D2D1_BITMAP_PROPERTIES1 {
@@ -232,6 +257,7 @@ impl DCompRenderer {
                 bitmapOptions: D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
                 ..Default::default()
             };
+
             // Direct2Dが扱える形式に変換し、d2d_context.SetTargetでセット
             let d2d_bitmap = self
                 .d2d_context
@@ -246,39 +272,40 @@ impl DCompRenderer {
             // 背景を透明でクリア
             self.d2d_context
                 .Clear(Some(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }));
+        }
 
-            // 背景を角丸矩形で描画
-            let rect = D2D_RECT_F {
+        // 背景を角丸矩形で描画
+        let rounded_rect = D2D1_ROUNDED_RECT {
+            rect: D2D_RECT_F {
                 left: 0.0,
                 top: 0.0,
                 right: w,
                 bottom: h,
-            };
+            },
+            radiusX: 2.0, // 角丸の半径
+            radiusY: 2.0,
+        };
 
-            let rounded_rect = D2D1_ROUNDED_RECT {
-                rect,
-                radiusX: 2.0, // 角丸の半径
-                radiusY: 2.0,
-            };
+        // paddingを加味した描画領域
+        let text_rect = D2D_RECT_F {
+            left: p,
+            top: p,
+            right: w - p,
+            bottom: h - p,
+        };
+
+        // 文字列を取得
+        // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
+        let text: Vec<u16> = mode
+            .as_str()
+            .encode_utf16()
+            .chain(std::iter::once(0)) // ヌル終端
+            .collect();
+
+        // 描画命令
+        unsafe {
             self.d2d_context
                 .FillRoundedRectangle(&rounded_rect, &self.bg_brush);
-
-            // 文字列を取得
-            // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
-            let text: Vec<u16> = mode
-                .as_str()
-                .encode_utf16()
-                .chain(std::iter::once(0)) // ヌル終端
-                .collect();
-
-            // paddingを加味した描画領域
-            let text_rect = D2D_RECT_F {
-                left: p,
-                top: p,
-                right: w - p,
-                bottom: h - p,
-            };
-
             // 中央に描画
             self.d2d_context.DrawText(
                 &text,
@@ -288,61 +315,68 @@ impl DCompRenderer {
                 D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
                 DWRITE_MEASURING_MODE_NATURAL,
             );
+        };
 
+        // 描き終えた画用紙を片付けて画面に送信
+        unsafe {
             // ここでGPUに描画命令
             self.d2d_context.EndDraw(None, None)?;
-
             // 描画したバッファを画面に表示
+            // matchで、DXGI_STATUS_OCCLUDED（画面が隠れていて描画不要な状態）などの特殊な状況をハンドリングすることも可能
             self.swap_chain.Present(1, DXGI_PRESENT::default()).ok()?;
             // DirectComposition側に「準備ができたので合成して表示して」と伝える
             self.dcomp_device.Commit()?;
-
             // ターゲットを外す
+            // リソースの参照を解放するためと、次のフレームでの不具合を防ぐため
             self.d2d_context.SetTarget(None);
-            Ok(())
-        }
+        };
+
+        Ok(())
     }
 
     // 透明度操作
     pub fn set_opacity(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
             self.dcomp_effect_group.SetOpacity2(opacity)?;
-            self.dcomp_device.Commit()?;
-            Ok(())
-        }
+            self.dcomp_device.Commit()?
+        };
+        Ok(())
     }
 
     // todo:実際のフォントサイズを計算
     pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<(f32, f32)> {
-        unsafe {
-            let text: Vec<u16> = mode
-                .as_str()
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect();
+        let text: Vec<u16> = mode
+            .as_str()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
 
+        let mut metrics: DWRITE_TEXT_METRICS = Default::default();
+
+        unsafe {
             // 無限の大きさを指定して、自然な改行位置を測る
             let text_layout =
                 self.dw_factory
                     .CreateTextLayout(&text, &self.format, f32::MAX, f32::MAX)?;
 
-            let mut metrics = std::mem::zeroed();
             text_layout.GetMetrics(&mut metrics)?;
+        };
 
-            // DIP単位での幅と高さが取得できる
-            Ok((metrics.width, metrics.height))
-        }
+        // DIP単位での幅と高さが取得できる
+        Ok((metrics.width, metrics.height))
     }
 
     pub fn update_config(&mut self, style: &WindowStyle) -> anyhow::Result<()> {
+        // 色の更新
         unsafe {
-            // 色の更新
             self.font_brush.SetColor(&style.font_color);
             self.bg_brush.SetColor(&style.bg_color);
-            self.current_bg_color = style.bg_color;
+        };
+        self.current_bg_color = style.bg_color;
 
-            // フォントサイズが変わった場合のみ、TextFormatを再生成
-            if (self.current_font_size - style.font_size).abs() > f32::EPSILON {
+        // フォントサイズが変わった場合のみ、TextFormatを再生成
+        if (self.current_font_size - style.font_size).abs() > f32::EPSILON {
+            unsafe {
                 let format = self.dw_factory.CreateTextFormat(
                     w!("Noto Sans JP"),
                     None,
@@ -352,7 +386,6 @@ impl DCompRenderer {
                     style.font_size,
                     w!("ja-jp"),
                 )?;
-
                 format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
                 format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
@@ -360,6 +393,7 @@ impl DCompRenderer {
                 self.current_font_size = style.font_size;
             }
         }
+
         Ok(())
     }
 
@@ -388,7 +422,8 @@ impl DCompRenderer {
             self.dcomp_visual.SetContent(&self.swap_chain)?;
             self.dcomp_device.Commit()?;
             self.d2d_context.SetTarget(None);
-        }
+        };
+
         Ok(())
     }
 }

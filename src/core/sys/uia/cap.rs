@@ -1,9 +1,12 @@
-use crate::core::{
-    app::controller::Message,
-    sys::{
-        hooks::AppEvent,
-        uia::{com, utils::uia_init},
+use crate::{
+    core::{
+        app::controller::Message,
+        sys::{
+            hooks::AppEvent,
+            uia::{com, utils::uia_init},
+        },
     },
+    guard_res,
 };
 use anyhow::Context;
 use std::sync::mpsc;
@@ -25,6 +28,12 @@ pub enum InputCapability {
     Unknown,
 }
 
+impl InputCapability {
+    pub fn new() -> Self {
+        InputCapability::default()
+    }
+}
+
 pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
         let _guard = com::ComGuard::new();
@@ -42,7 +51,7 @@ fn run_cap_monitor(
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
     let (uia, cache_req) = uia_init().context("UIA初期化に失敗")?;
-    let mut cap = InputCapability::Unknown;
+    let mut cap = InputCapability::new();
     let mut processed = std::time::Instant::now();
 
     loop {
@@ -83,9 +92,7 @@ fn input_capability(
 
     // フォーカス要素の取得
     let res = unsafe { uia.GetFocusedElementBuildCache(cache) };
-    let Ok(el) = res else {
-        return Ok(win32_input_capability());
-    };
+    let el = guard_res!(res, Ok(win32_input_capability()));
 
     // 要素が無効化されていないかチェック
     if let Ok(enabled) = unsafe { el.CachedIsEnabled() }
@@ -94,15 +101,15 @@ fn input_capability(
         return Ok(InputCapability::No);
     }
 
-    // TextPatternかTextEditPatternが存在する
-    let has_text_pattern = unsafe {
-        el.GetCachedPattern(UIA_TextPatternId).is_ok()
-            || el.GetCachedPattern(UIA_TextEditPatternId).is_ok()
-    };
+    let (has_text_pattern, control_type) = unsafe {
+        // TextPatternかTextEditPatternが存在する
+        let has_text_pattern = el.GetCachedPattern(UIA_TextPatternId).is_ok()
+            || el.GetCachedPattern(UIA_TextEditPatternId).is_ok();
 
-    // ControlTypeのチェック
-    let Some(control_type) = unsafe { el.CachedControlType() }.ok() else {
-        return Ok(InputCapability::No);
+        // ControlTypeのチェック
+        let control_type = guard_res!(el.CachedControlType(), Ok(InputCapability::No));
+
+        (has_text_pattern, control_type)
     };
 
     println!("control type: {:?}", control_type);
@@ -163,21 +170,19 @@ fn is_cursor_ibeam() -> bool {
 
 // 読み取り専用チェック
 fn is_read_only(element: &IUIAutomationElement) -> bool {
-    unsafe {
-        // IUnknownを返すのでIUIAutomationValuePatternにキャストする
-        if let Ok(pattern_unk) = element.GetCachedPattern(UIA_ValuePatternId) {
-            // パターンを持っていればキャストを試みる
-            if let Ok(value_pattern) = pattern_unk.cast::<IUIAutomationValuePattern>() {
-                // ReadOnlyかチェック
-                if let Ok(read_only) = value_pattern.CachedIsReadOnly() {
-                    // println!("読み取り専用: {:?}", read_only.as_bool());
-                    return read_only.as_bool();
-                }
+    // IUnknownを返すのでIUIAutomationValuePatternにキャストする
+    if let Ok(pattern_unk) = unsafe { element.GetCachedPattern(UIA_ValuePatternId) } {
+        // パターンを持っていればキャストを試みる
+        if let Ok(value_pattern) = pattern_unk.cast::<IUIAutomationValuePattern>() {
+            // ReadOnlyかチェック
+            if let Ok(read_only) = unsafe { value_pattern.CachedIsReadOnly() } {
+                // println!("読み取り専用: {:?}", read_only.as_bool());
+                return read_only.as_bool();
             }
         }
-
-        false
     }
+
+    false
 }
 
 // UIAで判定できない場合
@@ -187,30 +192,34 @@ fn win32_input_capability() -> InputCapability {
         return InputCapability::No;
     }
 
-    let id = unsafe { GetWindowThreadProcessId(hwnd, None) };
-
     // キャレットが存在し、点滅しているか
-
     let mut info = GUITHREADINFO {
         cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
         ..Default::default()
     };
-
     let is_active = (info.flags.0 & (GUI_CARETBLINKING.0 | GUI_INMENUMODE.0)) != 0;
 
-    if unsafe { GetGUIThreadInfo(id, &mut info).is_ok() } {
+    let res = unsafe {
+        let id = GetWindowThreadProcessId(hwnd, None);
+        GetGUIThreadInfo(id, &mut info)
+    };
+
+    if res.is_ok() {
         // キャレットが見えていて点滅中
         if is_active || !info.hwndCaret.0.is_null() {
             // println!("キャレットが見えていて点滅中");
             return InputCapability::Yes;
         }
     }
+
     // IMEコンテキストが有効か
-    let himc = unsafe { ImmGetContext(hwnd) };
-    if !himc.0.is_null() {
-        let _ = unsafe { ImmReleaseContext(hwnd, himc) };
-        // println!("IMMコンテキストが有効");
-        return InputCapability::Yes;
+    unsafe {
+        let himc = ImmGetContext(hwnd);
+        if !himc.0.is_null() {
+            let _ = ImmReleaseContext(hwnd, himc);
+            // println!("IMMコンテキストが有効");
+            return InputCapability::Yes;
+        }
     }
 
     InputCapability::Unknown

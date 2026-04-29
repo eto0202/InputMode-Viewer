@@ -48,4 +48,10 @@ macro_rules! guard_res {
             Err(_) => return,
         }
     };
+    ($e:expr, $else_ret:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err(_) => return $else_ret,
+        }
+    };
 }

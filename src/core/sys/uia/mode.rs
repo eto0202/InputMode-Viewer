@@ -29,7 +29,7 @@ fn run_monitor_loop(
 ) -> anyhow::Result<()> {
     let mut ime = ImeMonitor::new()?;
     let mut processed = std::time::Instant::now();
-    let mut mode = InputMode::Unknown;
+    let mut mode = InputMode::new();
 
     loop {
         // イベント受信
@@ -46,7 +46,7 @@ fn run_monitor_loop(
                 // ゲームなど起きるIME変更の遅延の対策
                 for i in 0..3 {
                     // IMEの状態を取得
-                    let cur_mode = ime.fetch_current_mode().unwrap_or(InputMode::Unknown);
+                    let cur_mode = ime.fetch_current_mode().unwrap_or_default();
 
                     // 前回と違うモードが取れたら、即座に送信して終了
                     if cur_mode != mode {
@@ -82,21 +82,24 @@ struct ImeMonitor {
 impl ImeMonitor {
     fn new() -> anyhow::Result<Self> {
         let (uia, cache_req) = uia_init().context("UIA初期化に失敗")?;
-        let root = unsafe { uia.GetRootElement().context("UIA取得に失敗: uia_thread")? };
 
-        // タスクバーウィンドウを特定
-        let tray_wnd = unsafe {
-            uia.CreatePropertyCondition(UIA_ClassNamePropertyId, &VARIANT::from("Shell_TrayWnd"))
-                .context("Condition作成に失敗: uia_thread")?
-        };
+        let (root, tray_wnd, text_block) = unsafe {
+            let root = uia.GetRootElement().context("UIA取得に失敗: uia_thread")?;
 
-        // SystemTrayIcon内のテキストを特定
-        let text_block = unsafe {
-            uia.CreatePropertyCondition(
-                UIA_AutomationIdPropertyId,
-                &VARIANT::from("InnerTextBlock"),
-            )
-            .context("Condition作成に失敗: uia_thread")?
+            // タスクバーウィンドウを特定
+            let tray_wnd = uia
+                .CreatePropertyCondition(UIA_ClassNamePropertyId, &VARIANT::from("Shell_TrayWnd"))
+                .context("Condition作成に失敗: uia_thread")?;
+
+            // SystemTrayIcon内のテキストを特定
+            let text_block = uia
+                .CreatePropertyCondition(
+                    UIA_AutomationIdPropertyId,
+                    &VARIANT::from("InnerTextBlock"),
+                )
+                .context("Condition作成に失敗: uia_thread")?;
+
+            (root, tray_wnd, text_block)
         };
 
         Ok(Self {
@@ -110,23 +113,26 @@ impl ImeMonitor {
     }
 
     fn fetch_current_mode(&mut self) -> anyhow::Result<InputMode> {
-        unsafe {
-            // トレイ要素が無い、死んでいる場合にのみ探す
-            if self.cached.is_none() || self.cached.as_ref().unwrap().CurrentProcessId().is_err() {
-                self.cached = self.root.FindFirst(TreeScope_Children, &self.tray_wnd).ok();
-            }
+        // 生存確認
+        let needs_refresh = self
+            .cached
+            .as_ref()
+            .map(|el| unsafe { el.CurrentProcessId().is_err() })
+            .unwrap_or(true); // None ならリフレッシュ必要
 
-            let tray = self.cached.as_ref().context("Tray not found")?;
-
-            // InnerTextBlockを探す
-            let els =
-                tray.FindAllBuildCache(TreeScope_Descendants, &self.text_block, &self.cache_req)?;
-
-            // 要素を特定
-            let el = utils::find_element(&els, "InnerTextBlock")?;
-            let name = el.CachedName()?;
-
-            Ok(InputMode::from_glyph(&name.to_string()))
+        if needs_refresh {
+            self.cached = unsafe { self.root.FindFirst(TreeScope_Children, &self.tray_wnd) }.ok();
         }
+
+        let uia_el = self.cached.as_ref().context("Element not found")?;
+
+        let els = unsafe {
+            uia_el.FindAllBuildCache(TreeScope_Descendants, &self.text_block, &self.cache_req)
+        }?;
+
+        let el = utils::find_element(&els, "InnerTextBlock")?;
+        let name = unsafe { el.CachedName() }?;
+
+        Ok(InputMode::from_glyph(&name.to_string()))
     }
 }

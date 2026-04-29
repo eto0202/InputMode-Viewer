@@ -72,55 +72,56 @@ pub fn calc_fixed_position(
     position: &WindowPos,
     margin_logical: i32,
 ) -> anyhow::Result<(i32, i32)> {
+    // 1. 現在のマウス位置を取得
+    let mut pt = POINT::default();
     unsafe {
-        // 1. 現在のマウス位置を取得
-        let mut pt = POINT::default();
         GetCursorPos(&mut pt).ok();
-
-        // 2. マウス位置のモニターハンドルを取得
-        let hmonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
-
-        // 3. モニターのワークエリアを取得
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        if !GetMonitorInfoW(hmonitor, &mut info).as_bool() {
-            anyhow::bail!("Failed to get monitor info");
-        }
-        let work_area = info.rcWork;
-
-        // 4. モニターのDPIスケールを取得
-        let mut dpi_x = 0;
-        let mut dpi_y = 0;
-        let scale = if GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y).is_ok()
-        {
-            dpi_x as f64 / 96.0
-        } else {
-            1.0
-        };
-
-        // 5. 論理サイズから物理サイズ・マージンへ変換
-        let p_width = (logical_width as f64 * scale).ceil() as i32;
-        let p_height = (logical_height as f64 * scale).ceil() as i32;
-        let margin = (margin_logical as f64 * scale).ceil() as i32;
-
-        // 6. 座標計算
-        let wa_width = work_area.right - work_area.left;
-        let wa_height = work_area.bottom - work_area.top;
-
-        let x = match position {
-            WindowPos::Left => work_area.left + margin,
-            WindowPos::Right => work_area.right - p_width - margin,
-            WindowPos::Top | WindowPos::Bottom => work_area.left + (wa_width - p_width) / 2,
-        };
-
-        let y = match position {
-            WindowPos::Top => work_area.top + margin,
-            WindowPos::Bottom => work_area.bottom - p_height - margin,
-            WindowPos::Left | WindowPos::Right => work_area.top + (wa_height - p_height) / 2,
-        };
-
-        Ok((x, y))
     }
+
+    // 2. マウス位置のモニターハンドルを取得
+    let hmonitor = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY) };
+
+    // 3. モニターのワークエリアを取得
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    if !unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
+        anyhow::bail!("Failed to get monitor info");
+    }
+    let work_area = info.rcWork;
+
+    // 4. モニターのDPIスケールを取得
+    let mut dpi_x = 0;
+    let mut dpi_y = 0;
+    let scale = if unsafe { GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) }
+        .is_ok()
+    {
+        dpi_x as f64 / 96.0
+    } else {
+        1.0
+    };
+
+    // 5. 論理サイズから物理サイズ・マージンへ変換
+    let p_width = (logical_width as f64 * scale).ceil() as i32;
+    let p_height = (logical_height as f64 * scale).ceil() as i32;
+    let margin = (margin_logical as f64 * scale).ceil() as i32;
+
+    // 6. 座標計算
+    let wa_width = work_area.right - work_area.left;
+    let wa_height = work_area.bottom - work_area.top;
+
+    let x = match position {
+        WindowPos::Left => work_area.left + margin,
+        WindowPos::Right => work_area.right - p_width - margin,
+        WindowPos::Top | WindowPos::Bottom => work_area.left + (wa_width - p_width) / 2,
+    };
+
+    let y = match position {
+        WindowPos::Top => work_area.top + margin,
+        WindowPos::Bottom => work_area.bottom - p_height - margin,
+        WindowPos::Left | WindowPos::Right => work_area.top + (wa_height - p_height) / 2,
+    };
+
+    Ok((x, y))
 }

@@ -18,9 +18,8 @@ pub fn get_uia_lock() -> &'static Mutex<()> {
 pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> {
     let _lock = get_uia_lock().lock().unwrap();
     // uia取得
-    let uia: IUIAutomation = unsafe {
-        CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL).context("UIA取得に失敗")?
-    };
+    let uia: IUIAutomation =
+        unsafe { CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL) }.context("UIA取得に失敗")?;
     // キャッシュリクエスト
     let cache = create_cache_request(&uia).context("キャッシュリクエスト作成に失敗")?;
 
@@ -28,37 +27,38 @@ pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> 
 }
 
 fn create_cache_request(uia: &IUIAutomation) -> anyhow::Result<IUIAutomationCacheRequest> {
-    unsafe {
-        let cache_req = uia
-            .CreateCacheRequest()
-            .context("Failed CreateCacheRequest")?;
+    let cache_req = unsafe { uia.CreateCacheRequest() }.context("Failed CreateCacheRequest")?;
 
-        // RawViewに設定し、すべての要素を無視せず表示
-        // これを設定しないとInnerTextBlockが無視される
-        cache_req
-            .SetTreeFilter(&uia.RawViewCondition()?)
-            .context("Failed SetTreeFilter")?;
+    // RawViewに設定し、すべての要素を無視せず表示
+    // これを設定しないとInnerTextBlockが無視される
+    let filter = unsafe { uia.RawViewCondition() }?;
+    unsafe { cache_req.SetTreeFilter(&filter) }.context("Failed SetTreeFilter")?;
 
-        // 取得したいプロパティ
-        // 探索用
-        cache_req.AddProperty(UIA_NamePropertyId)?;
-        cache_req.AddProperty(UIA_AutomationIdPropertyId)?;
-        cache_req.AddProperty(UIA_IsOffscreenPropertyId)?;
-        cache_req.AddProperty(UIA_RuntimeIdPropertyId)?;
-        // 入力判定用
-        cache_req.AddProperty(UIA_IsEnabledPropertyId)?;
-        cache_req.AddProperty(UIA_ControlTypePropertyId)?;
-        cache_req.AddPattern(UIA_TextPatternId)?;
-        cache_req.AddPattern(UIA_TextEditPatternId)?;
-        cache_req.AddPattern(UIA_ValuePatternId)?;
+    // 取得したいプロパティ
+    // 探索用
+    [
+        UIA_NamePropertyId,
+        UIA_AutomationIdPropertyId,
+        UIA_IsOffscreenPropertyId,
+        UIA_RuntimeIdPropertyId,
+        UIA_IsEnabledPropertyId,
+        UIA_ControlTypePropertyId,
+    ]
+    .into_iter()
+    .try_for_each(|id| unsafe { cache_req.AddProperty(id) })?;
 
-        // 検索範囲
-        cache_req
-            .SetTreeScope(TreeScope_Element)
-            .context("Failed SetTreeScope")?;
+    [
+        UIA_TextPatternId,
+        UIA_TextEditPatternId,
+        UIA_ValuePatternId,
+    ]
+    .into_iter()
+    .try_for_each(|id| unsafe { cache_req.AddPattern(id) })?;
 
-        Ok(cache_req)
-    }
+    // 検索範囲
+    unsafe { cache_req.SetTreeScope(TreeScope_Element) }.context("Failed SetTreeScope")?;
+
+    Ok(cache_req)
 }
 
 // キャッシュされたUIA要素リストから指定のIDのIUIAutomationElementを取得
@@ -66,29 +66,27 @@ pub fn find_element(
     array: &IUIAutomationElementArray,
     id: &'static str,
 ) -> anyhow::Result<IUIAutomationElement> {
-    unsafe {
+    let len = unsafe { array.Length() }?;
+
+    for i in 0..len {
         // 早期リターン
-        let len = array.Length()?;
-        for i in 0..len {
-            // 早期リターン
-            let el = array.GetElement(i)?;
+        let el = unsafe { array.GetElement(i) }?;
 
-            if skip_err!(el.CachedAutomationId()) != id {
-                continue;
-            }
-
-            if crate::skip_err!(el.CachedIsOffscreen()).as_bool() {
-                continue;
-            }
-
-            let name = crate::skip_err!(el.CachedName()).to_string();
-            if matches!(InputMode::from_glyph(&name), InputMode::Unknown) {
-                continue;
-            }
-
-            return Ok(el);
+        if skip_err!(unsafe { el.CachedAutomationId() }) != id {
+            continue;
         }
 
-        Err(anyhow::anyhow!("Element Not Available"))
+        if skip_err!(unsafe { el.CachedIsOffscreen() }).as_bool() {
+            continue;
+        }
+
+        let name = skip_err!(unsafe { el.CachedName() }).to_string();
+        if matches!(InputMode::from_glyph(&name), InputMode::Unknown) {
+            continue;
+        }
+
+        return Ok(el);
     }
+
+    Err(anyhow::anyhow!("Element Not Available"))
 }

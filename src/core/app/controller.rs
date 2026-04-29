@@ -79,7 +79,7 @@ impl ApplicationHandler<Message> for Controller {
                     el.set_control_flow(winit::event_loop::ControlFlow::Poll);
                     unsafe {
                         let _ = WaitForSingleObject(core.renderer.waitable_object, 1000);
-                    }
+                    };
                     let (x, y) = utils::set_predicted_position(
                         core.mw.hwnd,
                         self.state.mx,
