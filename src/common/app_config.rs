@@ -38,7 +38,8 @@ impl Default for FloatingWindow {
 pub struct FixedWindow {
     pub role: WindowRole,
     pub position: WindowPos, // 表示位置
-    pub style: WindowStyle,  // ウィンドウスタイル
+    pub margin: i32,
+    pub style: WindowStyle, // ウィンドウスタイル
     pub text_style: TextStyle,
 }
 
@@ -47,6 +48,7 @@ impl Default for FixedWindow {
         Self {
             role: WindowRole::Fixed,
             position: WindowPos::Top,
+            margin: 20,
             style: WindowStyle::default(),
             text_style: TextStyle::default(),
         }
@@ -74,9 +76,14 @@ struct D2d1ColorFDef {
 pub enum WindowPos {
     #[default]
     Top,
+    TopLeft,
+    TopRight,
+    Center,
+    CenterLeft,
+    CenterRight,
     Bottom,
-    Left,
-    Right,
+    BottomLeft,
+    BottomRight,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, AsRefStr, EnumString)]

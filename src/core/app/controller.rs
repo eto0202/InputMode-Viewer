@@ -94,7 +94,7 @@ impl ApplicationHandler<Message> for Controller {
                         core.mw.l_size.width,
                         core.mw.l_size.height,
                         &cfg.fixed.position,
-                        20,
+                        cfg.fixed.margin,
                     ) {
                         let _ = win32::set_window_position(core.mw.hwnd, x, y);
                         (self.state.wx, self.state.wy) = (x, y);
@@ -247,7 +247,7 @@ impl Controller {
 
             let _ = core.mw.window.request_inner_size(final_size);
         }
-        
+
         core.mw.window.request_redraw();
 
         Ok(())

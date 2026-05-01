@@ -101,7 +101,7 @@ pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
             -10000,
             0,
             0,
-            SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOREDRAW,
         )
     }?;
     Ok(())

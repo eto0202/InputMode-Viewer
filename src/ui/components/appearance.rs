@@ -11,7 +11,7 @@ use gpui_component::{
     setting::{SettingField, SettingItem},
 };
 
-pub fn appearance(window: &mut Window, cx: &mut Context<SettingsWindow>) -> Vec<SettingItem> {
+pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<SettingItem> {
     vec![
         SettingItem::new(
             "Dark Mode",

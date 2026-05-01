@@ -123,7 +123,6 @@ impl Fixed {
                     |val: f64, cx: &mut App| {
                         let o = if val < 1.0 { 1.0 } else { val };
                         AppConfig::global_mut(cx).fixed.style.opacity = (o / 100.0) as f32;
-
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -135,9 +134,14 @@ impl Fixed {
                 SettingField::dropdown(
                     vec![
                         (WindowPos::Top.as_ref().into(), "Top".into()),
-                        (WindowPos::Left.as_ref().into(), "Left".into()),
+                        (WindowPos::TopLeft.as_ref().into(), "TopLeft".into()),
+                        (WindowPos::TopRight.as_ref().into(), "TopRight".into()),
+                        (WindowPos::Center.as_ref().into(), "Center".into()),
+                        (WindowPos::CenterLeft.as_ref().into(), "CenterLeft".into()),
+                        (WindowPos::CenterRight.as_ref().into(), "CenterRight".into()),
                         (WindowPos::Bottom.as_ref().into(), "Bottom".into()),
-                        (WindowPos::Right.as_ref().into(), "Right".into()),
+                        (WindowPos::BottomLeft.as_ref().into(), "BottomLeft".into()),
+                        (WindowPos::BottomRight.as_ref().into(), "BottomRight".into()),
                     ],
                     |cx: &App| {
                         AppConfig::global(cx)
@@ -156,6 +160,24 @@ impl Fixed {
                 .default_value(AppConfig::default().fixed.position.as_ref().to_string()),
             )
             .description("Enter window position: Default Top"),
+            SettingItem::new(
+                "Margin",
+                SettingField::number_input(
+                    NumberFieldOptions {
+                        min: 0.0,
+                        max: 500.0,
+                        step: 1.0,
+                    },
+                    |cx: &App| (AppConfig::global(cx).fixed.margin) as f64,
+                    |val: f64, cx: &mut App| {
+                        let m = if val < 0.0 { 0.0 } else { val };
+                        AppConfig::global_mut(cx).fixed.margin = m as i32;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().fixed.margin),
+            )
+            .description("Margin : Min 0, Max 500, Default 20"),
         ]
     }
 }

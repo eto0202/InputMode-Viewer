@@ -65,23 +65,21 @@ pub fn set_predicted_position(hwnd: HWND, mouse_x: i32, mouse_y: i32, scale: f64
     (current.x, current.y)
 }
 
-/// マウス位置のモニターを判定し、Fixedウィンドウの物理座標を計算して返す
+// マウス位置のモニターを判定し、Fixedウィンドウの物理座標を計算して返す
 pub fn calc_fixed_position(
     logical_width: f32,
     logical_height: f32,
     position: &WindowPos,
     margin_logical: i32,
 ) -> anyhow::Result<(i32, i32)> {
-    // 1. 現在のマウス位置を取得
     let mut pt = POINT::default();
     unsafe {
         GetCursorPos(&mut pt).ok();
     }
 
-    // 2. マウス位置のモニターハンドルを取得
     let hmonitor = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY) };
 
-    // 3. モニターのワークエリアを取得
+    // モニターのワークエリアを取得
     let mut info = MONITORINFO {
         cbSize: std::mem::size_of::<MONITORINFO>() as u32,
         ..Default::default()
@@ -91,7 +89,7 @@ pub fn calc_fixed_position(
     }
     let work_area = info.rcWork;
 
-    // 4. モニターのDPIスケールを取得
+    // モニターのDPIスケールを取得
     let mut dpi_x = 0;
     let mut dpi_y = 0;
     let scale = if unsafe { GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) }
@@ -102,25 +100,41 @@ pub fn calc_fixed_position(
         1.0
     };
 
-    // 5. 論理サイズから物理サイズ・マージンへ変換
+    // 論理サイズから物理サイズ・マージンへ変換
     let p_width = (logical_width as f64 * scale).ceil() as i32;
     let p_height = (logical_height as f64 * scale).ceil() as i32;
     let margin = (margin_logical as f64 * scale).ceil() as i32;
 
-    // 6. 座標計算
+    // 座標計算
     let wa_width = work_area.right - work_area.left;
     let wa_height = work_area.bottom - work_area.top;
 
     let x = match position {
-        WindowPos::Left => work_area.left + margin,
-        WindowPos::Right => work_area.right - p_width - margin,
-        WindowPos::Top | WindowPos::Bottom => work_area.left + (wa_width - p_width) / 2,
+        // 左側（マージン分右へ）
+        WindowPos::TopLeft | WindowPos::BottomLeft | WindowPos::CenterLeft => {
+            work_area.left + margin
+        }
+        // 右側（右端から幅とマージン分左へ）
+        WindowPos::TopRight | WindowPos::BottomRight | WindowPos::CenterRight => {
+            work_area.right - p_width - margin
+        }
+        // 中央（ワークエリア中央から幅の半分左へ）
+        WindowPos::Top | WindowPos::Bottom | WindowPos::Center => {
+            work_area.left + (wa_width - p_width) / 2
+        }
     };
 
     let y = match position {
-        WindowPos::Top => work_area.top + margin,
-        WindowPos::Bottom => work_area.bottom - p_height - margin,
-        WindowPos::Left | WindowPos::Right => work_area.top + (wa_height - p_height) / 2,
+        // 上側（マージン分下へ）
+        WindowPos::Top | WindowPos::TopLeft | WindowPos::TopRight => work_area.top + margin,
+        // 下側（下端から高さとマージン分上へ）
+        WindowPos::Bottom | WindowPos::BottomLeft | WindowPos::BottomRight => {
+            work_area.bottom - p_height - margin
+        }
+        // 中央（ワークエリア中央から高さの半分上へ）
+        WindowPos::Center | WindowPos::CenterLeft | WindowPos::CenterRight => {
+            work_area.top + (wa_height - p_height) / 2
+        }
     };
 
     Ok((x, y))
