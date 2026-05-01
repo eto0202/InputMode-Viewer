@@ -1,5 +1,4 @@
-use crate::{core::app::prelude::*, guard_opt};
-use windows::Win32::System::Threading::WaitForSingleObject;
+use crate::{core::app::prelude::*, guard_opt, guard_res};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -74,29 +73,58 @@ impl ApplicationHandler<Message> for Controller {
 
         if self.state.displayed {
             let cfg = core.cfg.read();
+            let (info, scale) = guard_res!(utils::monitor_info());
+
             match cfg.active_role {
                 WindowRole::Floating => {
                     el.set_control_flow(winit::event_loop::ControlFlow::Poll);
                     unsafe {
                         let _ = WaitForSingleObject(core.renderer.waitable_object, 1000);
                     };
-                    let (x, y) = utils::set_predicted_position(
+
+                    let _ = win32::set_window_position(
                         core.mw.hwnd,
+                        info.rcMonitor.left,
+                        info.rcMonitor.top,
+                        info.rcMonitor.right - info.rcMonitor.left,
+                        info.rcMonitor.bottom - info.rcMonitor.top,
+                    );
+
+                    let (cur_x, cur_y, x, y) = utils::set_predicted_position(
                         self.state.mx,
                         self.state.my,
                         core.mw.window.scale_factor(),
+                        cfg.floating.offset,
                     );
-                    (self.state.mx, self.state.my) = (x, y);
+                    let _ = core.renderer.set_position(
+                        (x - info.rcMonitor.left) as f32,
+                        (y - info.rcMonitor.top) as f32,
+                    );
+                    (self.state.mx, self.state.my) = (cur_x, cur_y);
                 }
                 WindowRole::Fixed => {
                     el.set_control_flow(winit::event_loop::ControlFlow::Wait);
+
+                    let _ = win32::set_window_position(
+                        core.mw.hwnd,
+                        info.rcMonitor.left,
+                        info.rcMonitor.top,
+                        info.rcMonitor.right - info.rcMonitor.left,
+                        info.rcMonitor.bottom - info.rcMonitor.top,
+                    );
+
                     if let Ok((x, y)) = utils::calc_fixed_position(
                         core.mw.l_size.width,
                         core.mw.l_size.height,
                         &cfg.fixed.position,
                         cfg.fixed.margin,
+                        info,
+                        scale,
                     ) {
-                        let _ = win32::set_window_position(core.mw.hwnd, x, y);
+                        let _ = core.renderer.set_position(
+                            (x - info.rcMonitor.left) as f32,
+                            (y - info.rcMonitor.top) as f32,
+                        );
                         (self.state.wx, self.state.wy) = (x, y);
                     }
                 }
@@ -120,8 +148,10 @@ impl ApplicationHandler<Message> for Controller {
                     if let Ok(new_size) =
                         AppCore::try_resize(&core.cfg, &core.renderer, mode, core.mw.role)
                     {
-                        core.mw.l_size = new_size;
-                        let _ = core.mw.window.request_inner_size(new_size);
+                        let _ = core
+                            .renderer
+                            .resize(new_size.width as u32, new_size.height as u32);
+                        core.mw.window.request_redraw();
                     }
                 }
 
@@ -160,9 +190,8 @@ impl Controller {
 
         // ウィンドウを描画
         core.renderer.set_opacity(0.0)?;
-        win32::set_window_style(core.mw.hwnd)?;
+        core.renderer.set_position(-10000.0, -10000.0)?;
 
-        let _ = core.mw.window.request_inner_size(core.mw.l_size);
         core.mw.window.request_redraw();
 
         self.core = Some(core);
@@ -191,7 +220,8 @@ impl Controller {
         match event {
             WindowEvent::RedrawRequested => {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
-                let (w, h) = (core.mw.l_size.width, core.mw.l_size.height);
+                let (w, h) = core.renderer.calc_metrics(self.state.mode)?;
+                let (w, h) = (w + style.padding * 2.0, h + style.padding * 2.0);
                 let (opacity, is_animating) = core.mw.show_state.update(
                     Duration::from_millis(160),
                     self.state.displayed,
@@ -209,17 +239,11 @@ impl Controller {
                 } else {
                     // 非表示なら画面外に飛ばし透明に
                     core.renderer.set_opacity(0.0)?;
-                    win32::set_window_position(core.mw.hwnd, -10000, -10000)?;
+                    core.renderer.set_position(-10000.0, -10000.0)?;
                 }
             }
             WindowEvent::CloseRequested => {
                 el.exit();
-            }
-            WindowEvent::Resized(p_size) => {
-                // OSが確実にサイズ変更を完了したタイミング
-                // ここで p_size を使って IDXGISwapChain::ResizeBuffers を呼ぶ
-                core.renderer.resize(p_size.width, p_size.height)?;
-                core.mw.window.request_redraw();
             }
             _ => (),
         }
@@ -241,11 +265,11 @@ impl Controller {
         // サイズの再計算とリサイズ
         if let Ok((w, h)) = core.renderer.calc_metrics(self.state.mode) {
             let p = style.padding;
-            let final_size = LogicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
+            let p_size = PhysicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
 
-            core.mw.l_size = final_size;
-
-            let _ = core.mw.window.request_inner_size(final_size);
+            core.renderer
+                .resize(p_size.width as u32, p_size.height as u32)?;
+            core.mw.window.request_redraw();
         }
 
         core.mw.window.request_redraw();

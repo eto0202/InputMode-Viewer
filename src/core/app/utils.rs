@@ -1,13 +1,4 @@
-use windows::Win32::{
-    Foundation::{HWND, POINT},
-    Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint},
-    UI::{
-        HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
-        WindowsAndMessaging::GetCursorPos,
-    },
-};
-
-use crate::{common::app_config::WindowPos, core::sys::win32};
+use crate::{common::app_config::WindowPos, core::app::prelude::*};
 
 // メモリ上のバイト列から画像をデコードしアイコンを生成
 // アプリケーション内に画像が保存される
@@ -48,36 +39,41 @@ pub fn calc_predicted_potision(
 }
 
 // マウス位置の予測
-pub fn set_predicted_position(hwnd: HWND, mouse_x: i32, mouse_y: i32, scale: f64) -> (i32, i32) {
+pub fn set_predicted_position(
+    mouse_x: i32,
+    mouse_y: i32,
+    scale: f64,
+    offset: POINT,
+) -> (i32, i32, i32, i32) {
     // 出力引数
     let mut current = POINT::default();
     let _ = unsafe { GetCursorPos(&mut current) }; // 現在のマウス座標
 
     // 保存しておいた前回からの移動量(速度)を計算
+    // TODO: 予測係数は設定変更出来るように
     let (predicted_x, predicted_y) = calc_predicted_potision(current, mouse_x, mouse_y, 2, 1.6);
 
     // マウスから少しずらす
-    let offset = 20 * scale as i32;
+    let offset_x = offset.x * scale as i32;
+    let offset_y = offset.y * scale as i32;
 
-    let _ = win32::set_window_position(hwnd, predicted_x + offset, predicted_y + offset);
-
-    // 現在のマウス座標を保存
-    (current.x, current.y)
+    // 現在のマウス座標とマージンを足した予測座標
+    (
+        current.x,
+        current.y,
+        predicted_x + offset_x,
+        predicted_y + offset_y,
+    )
 }
 
-// マウス位置のモニターを判定し、Fixedウィンドウの物理座標を計算して返す
-pub fn calc_fixed_position(
-    logical_width: f32,
-    logical_height: f32,
-    position: &WindowPos,
-    margin_logical: i32,
-) -> anyhow::Result<(i32, i32)> {
+// モニターサイズを取得
+pub fn monitor_info() -> anyhow::Result<(MONITORINFO, f64)> {
     let mut pt = POINT::default();
     unsafe {
         GetCursorPos(&mut pt).ok();
     }
 
-    let hmonitor = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY) };
+    let hmonitor = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) };
 
     // モニターのワークエリアを取得
     let mut info = MONITORINFO {
@@ -87,7 +83,6 @@ pub fn calc_fixed_position(
     if !unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
         anyhow::bail!("Failed to get monitor info");
     }
-    let work_area = info.rcWork;
 
     // モニターのDPIスケールを取得
     let mut dpi_x = 0;
@@ -100,6 +95,19 @@ pub fn calc_fixed_position(
         1.0
     };
 
+    Ok((info, scale))
+}
+
+// Fixedウィンドウの物理座標を計算して返す
+pub fn calc_fixed_position(
+    logical_width: f32,
+    logical_height: f32,
+    position: &WindowPos,
+    margin_logical: i32,
+    info: MONITORINFO,
+    scale: f64,
+) -> anyhow::Result<(i32, i32)> {
+    let work_area = info.rcWork;
     // 論理サイズから物理サイズ・マージンへ変換
     let p_width = (logical_width as f64 * scale).ceil() as i32;
     let p_height = (logical_height as f64 * scale).ceil() as i32;

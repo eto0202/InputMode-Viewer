@@ -4,7 +4,8 @@ use crate::common::app_config::WindowRole;
 use crate::core::app::prelude::ShowState;
 use crate::core::sys::win32;
 use windows::Win32::Foundation::HWND;
-use winit::dpi::LogicalSize;
+use windows::Win32::Graphics::Gdi::MONITORINFO;
+use winit::dpi::{LogicalPosition, LogicalSize, Position};
 use winit::window::{Window, WindowAttributes};
 use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
 
@@ -17,8 +18,11 @@ pub struct ManagedWindow {
 }
 
 impl ManagedWindow {
-    pub fn new(el: &ActiveEventLoop, role: WindowRole) -> anyhow::Result<Self> {
-        let l_size = LogicalSize::new(1.0, 1.0);
+    pub fn new(el: &ActiveEventLoop, role: WindowRole, info: MONITORINFO) -> anyhow::Result<Self> {
+        let l_size = LogicalSize::new(
+            (info.rcMonitor.right - info.rcMonitor.left) as f32,
+            (info.rcMonitor.bottom - info.rcMonitor.top) as f32,
+        );
         // 共通の属性定義
         let attr = WindowAttributes::default()
             .with_decorations(false)
@@ -27,10 +31,11 @@ impl ManagedWindow {
             .with_active(false)
             .with_skip_taskbar(true)
             .with_no_redirection_bitmap(false)
-            .with_theme(None)
+            .with_position(Position::Logical(LogicalPosition::new(0.0, 0.0)))
             .with_inner_size(l_size);
 
         let window = Arc::new(el.create_window(attr)?);
+        window.set_cursor_hittest(false)?;
         let hwnd = win32::get_hwnd(&window)?;
 
         Ok(Self {

@@ -4,7 +4,10 @@ use std::{
 };
 use windows::Win32::{
     Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
-    UI::{Accessibility::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+    UI::{
+        Accessibility::*, Input::KeyboardAndMouse::*,
+        WindowsAndMessaging::*,
+    },
 };
 
 use crate::{guard_opt, guard_res};

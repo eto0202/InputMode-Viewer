@@ -5,19 +5,23 @@ use windows::Win32::{
     Graphics::Dwm::{
         DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
     },
-    UI::{Controls::MARGINS, WindowsAndMessaging::*},
+    UI::{
+        Controls::MARGINS,
+        
+        WindowsAndMessaging::*,
+    },
 };
 use windows_core::BOOL;
 
 // ウィンドウの位置指定
-pub fn set_window_position(hwnd: HWND, x: i32, y: i32) -> anyhow::Result<()> {
+pub fn set_window_position(hwnd: HWND, x: i32, y: i32, cx: i32, cy: i32) -> anyhow::Result<()> {
     // SWP_NOACTIVATE: フォーカスを奪わない
     // SWP_NOSIZE: サイズは変えない
     // SWP_ASYNCWINDOWPOS: スレッドをブロックせずに座標を送る
     // SWP_NOCOPYBITS: 描画バッファのコピーをスキップ（DCompなので不要）
-    let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_NOCOPYBITS;
+    let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOREDRAW;
 
-    unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, 0, 0, uflags) }?;
+    unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, cx, cy, uflags) }?;
     Ok(())
 }
 
@@ -42,29 +46,19 @@ pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> anyhow::Result<()> {
 pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
     // 基本スタイル
     unsafe {
-        let style = GetWindowLongW(hwnd, GWL_STYLE);
-        let new_style = (style as u32 & !(WS_OVERLAPPED | WS_CAPTION | WS_THICKFRAME).0)
-            | WS_POPUP.0
-            | WS_VISIBLE.0;
-
-        SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
+        let style = WS_POPUP | WS_VISIBLE;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style.0 as isize);
     }
 
     // 拡張スタイル
     unsafe {
-        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        SetWindowLongW(
-            hwnd,
-            GWL_EXSTYLE,
-            ex_style
-                | (WS_EX_LAYERED
-                    | WS_EX_TRANSPARENT
-                    | WS_EX_NOACTIVATE
-                    | WS_EX_TOOLWINDOW
-                    | WS_EX_TOPMOST)
-                    .0 as i32
-                | 0x00200000, // WS_EX_NOREDIRECTIONBITMAP
-        );
+        let ex_style = WS_EX_LAYERED
+            | WS_EX_TRANSPARENT
+            | WS_EX_NOACTIVATE
+            | WS_EX_TOOLWINDOW
+            | WS_EX_TOPMOST
+            | WS_EX_NOREDIRECTIONBITMAP;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style.0 as isize);
     };
 
     // 背景ブラシとDWM設定
@@ -97,13 +91,14 @@ pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
         SetWindowPos(
             hwnd,
             Some(HWND_TOPMOST),
-            -10000,
-            -10000,
             0,
             0,
-            SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOREDRAW,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOREDRAW,
         )
     }?;
+
     Ok(())
 }
 

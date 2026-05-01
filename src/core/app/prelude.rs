@@ -22,6 +22,19 @@ pub use std::{
     time::{Duration, Instant},
 };
 pub use tray_icon::{TrayIcon, menu::MenuEvent};
+pub use windows::Win32::{
+    Foundation::POINT,
+    Graphics::Gdi::{
+        GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    },
+    System::Threading::WaitForSingleObject,
+    UI::{
+        HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        WindowsAndMessaging::GetCursorPos,
+    },
+};
+
+pub use winit::dpi::PhysicalSize;
 pub use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize},

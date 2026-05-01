@@ -426,8 +426,23 @@ impl DCompRenderer {
         Ok(())
     }
 
-    // TODO: windowの位置制御
-    pub fn set_window_position() {
-        todo!()
+    pub fn set_position(&self, x: f32, y: f32) -> anyhow::Result<()> {
+        unsafe {
+            // Visualの位置を設定
+            self.dcomp_visual.SetOffsetX2(x)?;
+            self.dcomp_visual.SetOffsetY2(y)?;
+            self.dcomp_device.Commit()?;
+        }
+        Ok(())
+    }
+
+    pub fn set_visible(&self, visible: bool, x: f32, y: f32) -> anyhow::Result<()> {
+        if visible {
+            self.set_position(x, y)?;
+        } else {
+            // 今までの「画面外へ飛ばす」ロジックをそのまま適用
+            self.set_position(-10000.0, -10000.0)?;
+        }
+        Ok(())
     }
 }

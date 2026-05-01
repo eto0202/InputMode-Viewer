@@ -1,3 +1,4 @@
+
 use crate::core::app::prelude::*;
 
 pub struct AppCore {
@@ -27,7 +28,10 @@ impl AppCore {
         let proxy_window = el.create_window(attr)?;
 
         let style = AppCore::get_style(&cfg, cfg.read().active_role)?;
-        let mut mw = ManagedWindow::new(el, cfg.read().active_role)?;
+
+        let (info, _scale) = utils::monitor_info()?;
+        let mut mw = ManagedWindow::new(el, cfg.read().active_role, info)?;
+
         win32::set_window_style(mw.hwnd)?;
 
         let (renderer, w, h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
@@ -53,12 +57,12 @@ impl AppCore {
         renderer: &DCompRenderer,
         mode: InputMode,
         role: WindowRole,
-    ) -> anyhow::Result<LogicalSize<f32>> {
+    ) -> anyhow::Result<PhysicalSize<f32>> {
         let style = AppCore::get_style(cfg, role).context("No style")?;
         let (w, h) = renderer.calc_metrics(mode).context("Calc metrics failed")?;
 
         let p = style.padding;
-        let final_size = LogicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
+        let final_size = PhysicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
 
         Ok(final_size)
     }
