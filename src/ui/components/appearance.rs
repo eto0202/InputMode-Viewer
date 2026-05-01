@@ -7,7 +7,7 @@ use crate::{
 };
 use gpui::{App, Context, SharedString, *};
 use gpui_component::{
-    ActiveTheme, Theme, ThemeMode,
+    Theme, ThemeMode,
     setting::{SettingField, SettingItem},
 };
 
@@ -16,7 +16,9 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
         SettingItem::new(
             "Dark Mode",
             SettingField::switch(
-                |cx: &App| cx.theme().mode.is_dark(),
+                |cx: &App| {
+                    AppConfig::global(cx).theme_mode.is_dark() && Theme::global(cx).mode.is_dark()
+                },
                 |val: bool, cx: &mut App| {
                     let mode = if val {
                         ThemeMode::Dark
@@ -25,6 +27,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                     };
                     Theme::global_mut(cx).mode = mode;
                     Theme::change(mode, None, cx);
+                    AppConfig::global_mut(cx).theme_mode = mode;
                     let _ = config::save_config(AppConfig::global(cx));
                 },
             ),
@@ -36,6 +39,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                 |cx: &App| AppConfig::global(cx).auto_switch_theme,
                 |val: bool, cx: &mut App| {
                     AppConfig::global_mut(cx).auto_switch_theme = val;
+                    Theme::sync_system_appearance(None, cx);
                     let _ = config::save_config(AppConfig::global(cx));
                 },
             )

@@ -40,13 +40,24 @@ impl InputMode {
     }
 
     // 表示用テキストを取得
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str_full(&self) -> &'static str {
         match self {
             Self::Hiragana => "ひらがな (あ)",
             Self::HalfAlpha => "半角英数 (A)",
             Self::FullKatakana => "全角カタカナ (カ)",
             Self::FullAlpha => "全角英数 (Ａ)",
             Self::HalfKatakana => "半角カタカナ (ｶ)",
+            Self::Unknown => "",
+        }
+    }
+
+    pub fn as_str_compact(&self) -> &'static str {
+        match self {
+            Self::Hiragana => "あ",
+            Self::HalfAlpha => "A",
+            Self::FullKatakana => "カ",
+            Self::FullAlpha => "Ａ",
+            Self::HalfKatakana => "ｶ",
             Self::Unknown => "",
         }
     }

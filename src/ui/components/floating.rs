@@ -1,6 +1,6 @@
 use crate::{
     common::{
-        app_config::{AppConfig, D2d1ColorExt, GpuiColorExt},
+        app_config::{self, AppConfig, D2d1ColorExt, GpuiColorExt},
         config,
     },
     ui::{components::color_picker::ColorPickerSettingItem, window::SettingsWindow},
@@ -26,14 +26,8 @@ impl Floating {
         let bg_color = AppConfig::global(cx).floating.style.bg_color.to_hsla();
         let font_color = AppConfig::global(cx).floating.style.font_color.to_hsla();
 
-        let bg_state = cx.new(|cx| {
-            ColorPickerState::new(window, cx)
-                .default_value(bg_color)
-        });
-        let font_state = cx.new(|cx| {
-            ColorPickerState::new(window, cx)
-                .default_value(font_color)
-        });
+        let bg_state = cx.new(|cx| ColorPickerState::new(window, cx).default_value(bg_color));
+        let font_state = cx.new(|cx| ColorPickerState::new(window, cx).default_value(font_color));
 
         let subscriptions = vec![
             cx.subscribe(&bg_state, |this, _, ev, cx| match ev {
@@ -91,6 +85,37 @@ impl Floating {
                 )),
             )
             .description("Font Color: Default #F2F2F2"),
+            SettingItem::new(
+                "Text Style",
+                SettingField::dropdown(
+                    vec![
+                        (app_config::TextStyle::Full.as_ref().into(), "Full".into()),
+                        (
+                            app_config::TextStyle::Compact.as_ref().into(),
+                            "Compact".into(),
+                        ),
+                    ],
+                    |cx: &App| {
+                        AppConfig::global(cx)
+                            .floating
+                            .style
+                            .text_style
+                            .as_ref()
+                            .to_string()
+                            .into()
+                    },
+                    |val: SharedString, cx: &mut App| {
+                        let style = val
+                            .as_str()
+                            .parse::<app_config::TextStyle>()
+                            .unwrap_or(app_config::TextStyle::Full);
+                        AppConfig::global_mut(cx).floating.style.text_style = style;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().active_role.as_ref().to_string()),
+            )
+            .description("Enter text style: Default Full"),
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(

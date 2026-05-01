@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter, EnumString};
 use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
     pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
     pub auto_switch_theme: bool,
@@ -14,13 +14,25 @@ pub struct AppConfig {
     pub active_role: WindowRole,
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            startup: false,
+            auto_switch_theme: false,
+            theme_mode: ThemeMode::Dark,
+            floating: FloatingWindow::default(),
+            fixed: FixedWindow::default(),
+            active_role: WindowRole::Fixed,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FloatingWindow {
     pub role: WindowRole,
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
     pub style: WindowStyle,
-    pub text_style: TextStyle,
 }
 
 impl Default for FloatingWindow {
@@ -29,7 +41,6 @@ impl Default for FloatingWindow {
             role: WindowRole::Floating,
             offset: POINT { x: 20, y: 20 },
             style: WindowStyle::default(),
-            text_style: TextStyle::default(),
         }
     }
 }
@@ -40,7 +51,6 @@ pub struct FixedWindow {
     pub position: WindowPos, // 表示位置
     pub margin: i32,
     pub style: WindowStyle, // ウィンドウスタイル
-    pub text_style: TextStyle,
 }
 
 impl Default for FixedWindow {
@@ -50,7 +60,6 @@ impl Default for FixedWindow {
             position: WindowPos::Top,
             margin: 20,
             style: WindowStyle::default(),
-            text_style: TextStyle::default(),
         }
     }
 }
@@ -99,7 +108,8 @@ pub struct WindowStyle {
     pub opacity: f32,   // ウィンドウの透明度
     pub font_size: f32, // フォントサイズ
     #[serde(with = "D2d1ColorFDef")]
-    pub font_color: D2D1_COLOR_F, // フォントカラー
+    pub font_color: D2D1_COLOR_F, //
+    pub text_style: TextStyle,
     #[serde(with = "D2d1ColorFDef")]
     pub bg_color: D2D1_COLOR_F, // 背景色
 }
@@ -116,6 +126,7 @@ impl Default for WindowStyle {
                 b: 0.95,
                 a: 1.0,
             },
+            text_style: TextStyle::default(),
             bg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
         }
     }

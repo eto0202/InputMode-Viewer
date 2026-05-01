@@ -1,4 +1,3 @@
-
 use crate::core::app::prelude::*;
 
 pub struct AppCore {

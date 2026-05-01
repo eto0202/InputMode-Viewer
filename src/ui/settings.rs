@@ -1,6 +1,6 @@
-use crate::{core::sys::win32, ui::window};
+use crate::{common::app_config::AppConfig, core::sys::win32, ui::window};
 use gpui::*;
-use gpui_component::Root;
+use gpui_component::{Root, Theme};
 use gpui_component_assets::Assets;
 use windows::Win32::{
     Foundation::CloseHandle,
@@ -43,16 +43,31 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     Application::new().with_assets(Assets).run(move |cx| {
         gpui_component::init(cx);
 
-        if let Ok(handle) = cx.open_window(options, |w, cx| {
-            let v = cx.new(|cx| window::SettingsWindow::new(w, cx));
-            cx.new(|cx| Root::new(v, w, cx))
-        }) {
-            let _ = handle.update(cx, |_, w, _| {
-                let hwnd = win32::get_hwnd(&w).ok()?;
-                win32::set_always_on_top(hwnd, true).ok()?;
-                Some(())
-            });
-        }
+        let _ = cx.open_window(options, |w, cx| {
+            let s_v = cx.new(|cx| window::SettingsWindow::new(w, cx));
+            cx.new(|cx| {
+                let root = Root::new(s_v, w, cx);
+
+                cx.on_next_frame(w, |_, w, cx| {
+                    cx.observe_window_appearance(w, |_, w, cx| {
+                        if AppConfig::global(cx).auto_switch_theme {
+                            let appearance = cx.window_appearance();
+                            Theme::change(appearance, Some(w), cx);
+                            cx.refresh_windows();
+                        }
+                    })
+                    .detach();
+
+                    if AppConfig::global(cx).auto_switch_theme {
+                        Theme::sync_system_appearance(Some(w), cx);
+                    }
+                    let hwnd = win32::get_hwnd(&w).unwrap();
+                    let _ = win32::set_always_on_top(hwnd, true);
+                });
+
+                root
+            })
+        });
     });
 
     Ok(())

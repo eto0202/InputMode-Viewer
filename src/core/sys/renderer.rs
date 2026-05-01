@@ -1,4 +1,7 @@
-use crate::{common::app_config::WindowStyle, core::sys::uia::text::InputMode};
+use crate::{
+    common::app_config::{ TextStyle, WindowStyle},
+    core::sys::uia::text::InputMode,
+};
 use anyhow::Context;
 use std::f32;
 use windows::{
@@ -150,11 +153,11 @@ impl DCompRenderer {
             format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
             // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
-            let text: Vec<u16> = mode
-                .as_str()
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect();
+            let str = match style.text_style {
+                TextStyle::Full => mode.as_str_full(),
+                TextStyle::Compact => mode.as_str_compact(),
+            };
+            let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
             let text_layout = dw_factory.CreateTextLayout(&text, &format, f32::MAX, f32::MAX)?;
 
             let mut metrics: DWRITE_TEXT_METRICS = Default::default();
@@ -242,7 +245,14 @@ impl DCompRenderer {
     }
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
-    pub fn draw(&self, mode: InputMode, w: f32, h: f32, p: f32) -> anyhow::Result<()> {
+    pub fn draw(
+        &self,
+        mode: InputMode,
+        style: &WindowStyle,
+        w: f32,
+        h: f32,
+        p: f32,
+    ) -> anyhow::Result<()> {
         // SwapChainのバッファをD2Dの描き先に設定
         // 次に書き込むための画用紙（DXGI Surface）を取得
         unsafe {
@@ -295,11 +305,11 @@ impl DCompRenderer {
 
         // 文字列を取得
         // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
-        let text: Vec<u16> = mode
-            .as_str()
-            .encode_utf16()
-            .chain(std::iter::once(0)) // ヌル終端
-            .collect();
+        let str = match style.text_style {
+            TextStyle::Full => mode.as_str_full(),
+            TextStyle::Compact => mode.as_str_compact(),
+        };
+        let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
 
         // 描画命令
         unsafe {
@@ -345,7 +355,7 @@ impl DCompRenderer {
     // 実際のフォントサイズを計算
     pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<(f32, f32)> {
         let text: Vec<u16> = mode
-            .as_str()
+            .as_str_full()
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();

@@ -230,7 +230,8 @@ impl Controller {
 
                 if self.state.displayed {
                     core.renderer.set_opacity(opacity)?;
-                    core.renderer.draw(self.state.mode, w, h, style.padding)?;
+                    core.renderer
+                        .draw(self.state.mode, &style, w, h, style.padding)?;
 
                     // アニメーション中のみ再描画を予約
                     if is_animating {
