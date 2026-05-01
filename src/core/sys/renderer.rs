@@ -30,13 +30,13 @@ use windows::{
 1.D3D11
     GPUという巨大な調理場を確保する担当。
 2.DXGI
-    「できた料理（画像）を、どうやってお客さん（画面）に届けるか」という配送ルート（スワップチェーン）を作る担当。
+    「画像を、どうやって画面に届けるか」という配送ルート（スワップチェーン）を作る担当。
 3.Direct2D
     「実際に絵を描く」担当。
 4.DirectWrite
     「綺麗な文字のデザイン」だけを専門に考える担当。
 5.DirectComposition
-    描いた絵を「シール」のようにウィンドウにペタッと貼り付けたり、透かしを入れたりする最新の担当。
+    描いた絵を「シール」のようにウィンドウに貼り付けたり、透かしを入れたりする担当。
 */
 
 #[derive(Debug)]
@@ -125,7 +125,7 @@ impl DCompRenderer {
             // Visual にエフェクトを紐付ける（初期値は不透明度 1.0 にしておく）
             dcomp_visual.SetEffect(&dcomp_effect_group)?;
             dcomp_target.SetRoot(&dcomp_visual)?;
-            
+
             println!("DirectComposition OK");
 
             (dcomp_device, dcomp_target, dcomp_visual, dcomp_effect_group)
@@ -163,7 +163,7 @@ impl DCompRenderer {
             // パディングを足して正確なスワップチェーンのサイズを算出
             let lw = metrics.width + style.padding * 2.0;
             let lh = metrics.height + style.padding * 2.0;
-            
+
             println!("Typography (DirectWrite) OK");
 
             (dw_factory, format, lw, lh)
@@ -196,7 +196,6 @@ impl DCompRenderer {
             let swap_chain =
                 dxgi_factory.CreateSwapChainForComposition(&d3d_device, &swap_chain_desc, None)?;
 
-
             // Vcyncの設定
             let waitable_object = swap_chain
                 .cast::<IDXGISwapChain2>()?
@@ -213,7 +212,7 @@ impl DCompRenderer {
 
             let dpi = (scale * 96.0) as f32;
             d2d_context.SetDpi(dpi, dpi);
-            
+
             println!("Presentation (SwapChain, Brushes) OK");
 
             (swap_chain, waitable_object, font_brush, bg_brush)
@@ -343,7 +342,7 @@ impl DCompRenderer {
         Ok(())
     }
 
-    // todo:実際のフォントサイズを計算
+    // 実際のフォントサイズを計算
     pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<(f32, f32)> {
         let text: Vec<u16> = mode
             .as_str()
@@ -425,5 +424,10 @@ impl DCompRenderer {
         };
 
         Ok(())
+    }
+
+    // TODO: windowの位置制御
+    pub fn set_window_position() {
+        todo!()
     }
 }

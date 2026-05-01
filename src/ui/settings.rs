@@ -33,10 +33,10 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
             // ウィンドウ位置
             // TODO: モニターサイズからトレイメニュー付近を指定
             // TODO: 最終位置を記憶
-            origin: Point::new(px(700.0), px(250.0)),
-            size: size(px(800.0), px(600.0)),
+            origin: Point::new(px(550.0), px(250.0)),
+            size: size(px(1000.0), px(700.0)),
         })),
-        window_min_size: Some(size(px(600.0), px(400.0))),
+        window_min_size: Some(size(px(800.0), px(400.0))),
         ..Default::default()
     };
 

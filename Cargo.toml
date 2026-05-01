@@ -48,6 +48,7 @@ windows-numerics = "0.3.1"
 parking_lot = "0.12.5"
 strum = "0.28.0"
 strum_macros = "0.28.0"
+palette = "0.7.6"
 
 [profile.dev]
 debug = 1

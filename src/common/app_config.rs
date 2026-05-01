@@ -1,10 +1,14 @@
+use gpui_component::ThemeMode;
+use palette::{FromColor, Srgba};
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter, EnumString};
 use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AppConfig {
-    pub startup: bool,            // タスクスケジューラへの登録(管理者権限の要求)
+    pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
+    pub auto_switch_theme: bool,
+    pub theme_mode: ThemeMode,
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ
     pub active_role: WindowRole,
@@ -16,6 +20,7 @@ pub struct FloatingWindow {
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
     pub style: WindowStyle,
+    pub text_style: TextStyle,
 }
 
 impl Default for FloatingWindow {
@@ -24,6 +29,7 @@ impl Default for FloatingWindow {
             role: WindowRole::Floating,
             offset: POINT { x: 20, y: 20 },
             style: WindowStyle::default(),
+            text_style: TextStyle::default(),
         }
     }
 }
@@ -33,6 +39,7 @@ pub struct FixedWindow {
     pub role: WindowRole,
     pub position: WindowPos, // 表示位置
     pub style: WindowStyle,  // ウィンドウスタイル
+    pub text_style: TextStyle,
 }
 
 impl Default for FixedWindow {
@@ -41,6 +48,7 @@ impl Default for FixedWindow {
             role: WindowRole::Fixed,
             position: WindowPos::Top,
             style: WindowStyle::default(),
+            text_style: TextStyle::default(),
         }
     }
 }
@@ -71,6 +79,13 @@ pub enum WindowPos {
     Right,
 }
 
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, AsRefStr, EnumString)]
+pub enum TextStyle {
+    Compact,
+    #[default]
+    Full,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WindowStyle {
     pub padding: f32,   // 余白 最終的なウィンドウサイズは実際の文字列のMetrics + padding
@@ -95,6 +110,54 @@ impl Default for WindowStyle {
                 a: 1.0,
             },
             bg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
+        }
+    }
+}
+
+pub trait GpuiColorExt {
+    fn to_d2d1_color(&self) -> D2D1_COLOR_F;
+    fn to_palette(&self) -> palette::Hsla;
+}
+
+impl GpuiColorExt for gpui::Hsla {
+    fn to_d2d1_color(&self) -> D2D1_COLOR_F {
+        let srgba = palette::Srgba::from_color(self.to_palette());
+        D2D1_COLOR_F {
+            r: srgba.red,
+            g: srgba.green,
+            b: srgba.blue,
+            a: srgba.alpha,
+        }
+    }
+
+    fn to_palette(&self) -> palette::Hsla {
+        palette::Hsla::new(self.h * 360.0, self.s, self.l, self.a)
+    }
+}
+
+pub trait D2d1ColorExt {
+    fn to_hsla(&self) -> gpui::Hsla;
+}
+
+impl D2d1ColorExt for D2D1_COLOR_F {
+    fn to_hsla(&self) -> gpui::Hsla {
+        let srgba = Srgba::new(self.r, self.g, self.b, self.a);
+        let hsla = palette::Hsla::from_color(srgba);
+        hsla.to_gpui()
+    }
+}
+
+pub trait PaletteColorExt {
+    fn to_gpui(&self) -> gpui::Hsla;
+}
+
+impl PaletteColorExt for palette::Hsla {
+    fn to_gpui(&self) -> gpui::Hsla {
+        gpui::Hsla {
+            h: self.color.hue.into_degrees() / 360.0,
+            s: self.color.saturation,
+            l: self.color.lightness,
+            a: self.alpha,
         }
     }
 }

@@ -247,7 +247,7 @@ impl Controller {
 
             let _ = core.mw.window.request_inner_size(final_size);
         }
-
+        
         core.mw.window.request_redraw();
 
         Ok(())
