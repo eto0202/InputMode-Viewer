@@ -104,7 +104,7 @@ impl DCompRenderer {
             let d2d_device = d2d_factory.CreateDevice(&dxgi_device)?;
             let d2d_context = d2d_device.CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)?;
 
-            println!("Graphics Foundation (D3D, DXGI, D2D) OK");
+            log::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
             (
                 d3d_device,
                 dxgi_device,
@@ -129,7 +129,7 @@ impl DCompRenderer {
             dcomp_visual.SetEffect(&dcomp_effect_group)?;
             dcomp_target.SetRoot(&dcomp_visual)?;
 
-            println!("DirectComposition OK");
+            log::info!("DirectComposition OK");
 
             (dcomp_device, dcomp_target, dcomp_visual, dcomp_effect_group)
         };
@@ -167,7 +167,7 @@ impl DCompRenderer {
             let lw = metrics.width + style.padding * 2.0;
             let lh = metrics.height + style.padding * 2.0;
 
-            println!("Typography (DirectWrite) OK");
+            log::info!("Typography (DirectWrite) OK");
 
             (dw_factory, format, lw, lh)
         };
@@ -216,13 +216,13 @@ impl DCompRenderer {
             let dpi = (scale * 96.0) as f32;
             d2d_context.SetDpi(dpi, dpi);
 
-            println!("Presentation (SwapChain, Brushes) OK");
+            log::info!("Presentation (SwapChain, Brushes) OK");
 
             (swap_chain, waitable_object, font_brush, bg_brush)
         };
 
         unsafe { dcomp_device.Commit() }?;
-        println!("Commit OK");
+        log::info!("Commit OK");
 
         let renderer = Self {
             d2d_factory,

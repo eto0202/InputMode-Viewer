@@ -4,17 +4,25 @@ pub use crate::{
         config,
     },
     core::{
-        app::{app_core::*, show_state::*, tray, utils},
+        app::{
+            app_core::*,
+            calculation,
+            controller::{self, Message},
+            managed::ManagedWindow,
+            prelude::ShowState,
+            show_state::*,
+            tray,
+        },
         sys::{
             renderer::DCompRenderer,
             uia::{cap::InputCapability, text::InputMode},
             win32,
         },
-        window::managed::ManagedWindow,
     },
     ui,
 };
 pub use anyhow::Context;
+pub use notify::{Error, Event, EventKind, Watcher};
 pub use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 pub use std::{
     collections::HashMap,
@@ -23,7 +31,7 @@ pub use std::{
 };
 pub use tray_icon::{TrayIcon, menu::MenuEvent};
 pub use windows::Win32::{
-    Foundation::POINT,
+    Foundation::{HWND, POINT},
     Graphics::Gdi::{
         GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
     },
@@ -33,13 +41,11 @@ pub use windows::Win32::{
         WindowsAndMessaging::GetCursorPos,
     },
 };
-
-pub use winit::dpi::PhysicalSize;
 pub use winit::{
     application::ApplicationHandler,
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::{LogicalPosition, LogicalSize, PhysicalSize, Position},
     event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    event_loop::{ActiveEventLoop, EventLoopProxy},
     platform::windows::WindowAttributesExtWindows,
     window::{Window, WindowAttributes, WindowId},
 };

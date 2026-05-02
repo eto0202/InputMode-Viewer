@@ -25,21 +25,26 @@ impl AppCore {
             .with_max_inner_size(LogicalSize::new(1, 1))
             .with_position(LogicalPosition::new(0, 0));
         let proxy_window = el.create_window(attr)?;
+        log::info!("Create ProxyWindow successful");
 
         let style = AppCore::get_style(&cfg, cfg.read().active_role)?;
 
-        let (info, _scale) = utils::monitor_info()?;
+        let (info, _scale) = calculation::monitor_info()?;
         let mut mw = ManagedWindow::new(el, cfg.read().active_role, info)?;
+        log::info!("Create ManagedWindow successful");
 
         win32::set_window_style(mw.hwnd)?;
+        log::info!("Set window style successful");
 
         let (renderer, w, h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
-            .expect("DCompRenderer Failed");
+            .context("DCompRenderer Initialize Failed")?;
+        log::info!("Create DCompRenderer successful");
 
         mw.l_size = LogicalSize::new(w, h);
 
         // トレイアイコン
         let tray_icon = tray::tray_icon()?;
+        log::info!("Create tray icon successful");
 
         Ok(Self {
             cfg,
@@ -57,8 +62,8 @@ impl AppCore {
         mode: InputMode,
         role: WindowRole,
     ) -> anyhow::Result<PhysicalSize<f32>> {
-        let style = AppCore::get_style(cfg, role).context("No style")?;
-        let (w, h) = renderer.calc_metrics(mode).context("Calc metrics failed")?;
+        let style = AppCore::get_style(cfg, role)?;
+        let (w, h) = renderer.calc_metrics(mode)?;
 
         let p = style.padding;
         let final_size = PhysicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());

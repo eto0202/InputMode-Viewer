@@ -44,14 +44,14 @@ impl Default for Controller {
 impl ApplicationHandler<Message> for Controller {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if let Err(e) = self.handle_resumed(el) {
-            eprintln!("Application error during resume: {}", e);
+            log::error!("Application error during resume: {}", e);
             el.exit();
         }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         if let Err(e) = self.handle_window_event(el, id, event) {
-            eprintln!("Window_event error during resume: {}", e);
+            log::error!("Window_event error during resume: {}", e);
             el.exit();
         }
     }
@@ -73,7 +73,7 @@ impl ApplicationHandler<Message> for Controller {
 
         if self.state.displayed {
             let cfg = core.cfg.read();
-            let (info, scale) = guard_res!(utils::monitor_info());
+            let (info, scale) = guard_res!(calculation::monitor_info());
 
             match cfg.active_role {
                 WindowRole::Floating => {
@@ -90,7 +90,7 @@ impl ApplicationHandler<Message> for Controller {
                         info.rcMonitor.bottom - info.rcMonitor.top,
                     );
 
-                    let (cur_x, cur_y, x, y) = utils::set_predicted_position(
+                    let (cur_x, cur_y, x, y) = calculation::set_predicted_position(
                         self.state.mx,
                         self.state.my,
                         core.mw.window.scale_factor(),
@@ -113,7 +113,7 @@ impl ApplicationHandler<Message> for Controller {
                         info.rcMonitor.bottom - info.rcMonitor.top,
                     );
 
-                    if let Ok((x, y)) = utils::calc_fixed_position(
+                    if let Ok((x, y)) = calculation::calc_fixed_position(
                         core.mw.l_size.width,
                         core.mw.l_size.height,
                         &cfg.fixed.position,
@@ -168,7 +168,7 @@ impl ApplicationHandler<Message> for Controller {
                 if let Some(cfg) = &self.cfg {
                     let mut lock = cfg.write();
                     *lock = new_cfg.clone();
-                    println!("config updated!");
+                    log::debug!("config updated!");
                 }
                 // 最新データを直接渡して反映させる
                 let _ = self.apply_config_to_all(&new_cfg);
@@ -183,10 +183,9 @@ impl Controller {
             return Ok(());
         }
 
-        let cfg = self.cfg.as_ref().context("Config is loaded at startup")?;
-
+        let cfg = self.cfg.as_ref().context("AppCore missing")?;
         let core = AppCore::new(el, cfg.clone(), self.state.mode)?;
-        println!("AppCore initialized!");
+        log::info!("AppCore initialized");
 
         // ウィンドウを描画
         core.renderer.set_opacity(0.0)?;

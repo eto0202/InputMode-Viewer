@@ -18,6 +18,5 @@ pub fn spawn_settings_ui() -> anyhow::Result<()> {
         .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
         .spawn()
         .context("Failed to spawn Settings UI")?;
-
     Ok(())
 }

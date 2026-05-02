@@ -3,7 +3,7 @@ use crate::{
         app::controller::Message,
         sys::{
             hooks::AppEvent,
-            uia::{com, utils::uia_init},
+            uia::{com, init::uia_init},
         },
     },
     guard_res,
@@ -40,7 +40,7 @@ pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) 
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_cap_monitor(&proxy, &rx) {
-            eprintln!("Cap Monitor Error: {:?}. Restarting...", e);
+            log::warn!("Cap Monitor Error: {:?}. Restarting...", e);
             thread::sleep(std::time::Duration::from_secs(3));
         }
     });
@@ -50,7 +50,7 @@ fn run_cap_monitor(
     proxy: &EventLoopProxy<Message>,
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
-    let (uia, cache_req) = uia_init().context("UIA初期化に失敗")?;
+    let (uia, cache_req) = uia_init().context("Failed to initialize UIA")?;
     let mut cap = InputCapability::new();
     let mut processed = std::time::Instant::now();
 
@@ -64,7 +64,7 @@ fn run_cap_monitor(
                 if processed.elapsed() < std::time::Duration::from_millis(200) {
                     continue;
                 }
-                println!("cap_thread: Event Received");
+                log::debug!("cap_thread: Event Received");
                 // 入力可能性を取得
                 let cur_cap = input_capability(&uia, &cache_req)?;
                 // 前回と違う場合のみ通知
@@ -84,8 +84,6 @@ fn input_capability(
     uia: &IUIAutomation,
     cache: &IUIAutomationCacheRequest,
 ) -> anyhow::Result<InputCapability> {
-    println!("-- Input_capability Check --");
-
     if win32_input_capability() == InputCapability::Yes {
         return Ok(InputCapability::Yes);
     }
@@ -112,7 +110,7 @@ fn input_capability(
         (has_text_pattern, control_type)
     };
 
-    println!("control type: {:?}", control_type);
+    log::debug!("control type: {:?}", control_type);
 
     #[allow(non_upper_case_globals)]
     let cap = match control_type {

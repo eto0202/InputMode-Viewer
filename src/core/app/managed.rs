@@ -1,13 +1,4 @@
-use std::sync::Arc;
-
-use crate::common::app_config::WindowRole;
-use crate::core::app::prelude::ShowState;
-use crate::core::sys::win32;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::MONITORINFO;
-use winit::dpi::{LogicalPosition, LogicalSize, Position};
-use winit::window::{Window, WindowAttributes};
-use winit::{event_loop::ActiveEventLoop, platform::windows::WindowAttributesExtWindows};
+use crate::core::app::prelude::*;
 
 pub struct ManagedWindow {
     pub window: Arc<Window>,

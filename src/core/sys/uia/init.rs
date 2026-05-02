@@ -18,21 +18,23 @@ pub fn get_uia_lock() -> &'static Mutex<()> {
 pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> {
     let _lock = get_uia_lock().lock().unwrap();
     // uia取得
-    let uia: IUIAutomation =
-        unsafe { CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL) }.context("UIA取得に失敗")?;
+    let uia: IUIAutomation = unsafe { CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL) }
+        .context("Failed to initialize IUIAutomation")?;
     // キャッシュリクエスト
-    let cache = create_cache_request(&uia).context("キャッシュリクエスト作成に失敗")?;
+    let cache = create_cache_request(&uia).context("Failed to create cache request")?;
 
+    log::info!("IUIAutomation initialization successful");
     Ok((uia, cache))
 }
 
 fn create_cache_request(uia: &IUIAutomation) -> anyhow::Result<IUIAutomationCacheRequest> {
-    let cache_req = unsafe { uia.CreateCacheRequest() }.context("Failed CreateCacheRequest")?;
+    let cache_req =
+        unsafe { uia.CreateCacheRequest() }.context("Failed to create cache request")?;
 
     // RawViewに設定し、すべての要素を無視せず表示
     // これを設定しないとInnerTextBlockが無視される
     let filter = unsafe { uia.RawViewCondition() }?;
-    unsafe { cache_req.SetTreeFilter(&filter) }.context("Failed SetTreeFilter")?;
+    unsafe { cache_req.SetTreeFilter(&filter) }.context("Failed to SetTreeFilter")?;
 
     // 取得したいプロパティ
     // 探索用
@@ -80,8 +82,9 @@ pub fn find_element(
             continue;
         }
 
-        let name = skip_err!(unsafe { el.CachedName() }).to_string();
-        if matches!(InputMode::from_glyph(&name), InputMode::Unknown) {
+        let glyph = skip_err!(unsafe { el.CachedName() }).to_string();
+
+        if matches!(InputMode::from_glyph(&glyph), InputMode::Unknown) {
             continue;
         }
 

@@ -1,16 +1,9 @@
-use anyhow::Context;
-use notify::{Error, Event, EventKind, Watcher};
-use winit::event_loop::EventLoopProxy;
-
-use crate::{
-    common::config,
-    core::app::controller::{self, Message},
-};
+use crate::core::app::prelude::*;
 
 pub fn spawn_config_watcher(
     proxy: EventLoopProxy<controller::Message>,
 ) -> anyhow::Result<impl Watcher> {
-    let path = config::get_config_path();
+    let path = config::get_config_path()?;
     let parent_dir = path.parent().context("Invalid config path")?.to_path_buf();
 
     // 親ディレクトリは確実に作成
@@ -28,7 +21,7 @@ pub fn spawn_config_watcher(
                 }
             }
         }
-        Err(e) => eprintln!("watch error: {:?}", e),
+        Err(e) => log::error!("notify recommended_watcher Error: {:?}", e),
     })?;
 
     watcher.watch(&parent_dir, notify::RecursiveMode::NonRecursive)?;

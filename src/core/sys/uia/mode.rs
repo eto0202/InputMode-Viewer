@@ -2,7 +2,7 @@ use crate::core::{
     app::controller::Message,
     sys::{
         hooks::AppEvent,
-        uia::{com, text::*, utils::uia_init, *},
+        uia::{com, init::uia_init, text::*, *},
     },
 };
 use anyhow::Context;
@@ -16,7 +16,7 @@ pub fn mode_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>)
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_monitor_loop(&proxy, &rx) {
-            eprintln!("IME Monitor Error: {:?}. Restarting...", e);
+            log::warn!("IME Monitor Error: {:?}. Restarting...", e);
             thread::sleep(std::time::Duration::from_secs(3));
         }
     });
@@ -28,6 +28,8 @@ fn run_monitor_loop(
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
     let mut ime = ImeMonitor::new()?;
+    log::info!("Run ImeMonitor successful");
+
     let mut processed = std::time::Instant::now();
     let mut mode = InputMode::new();
 
@@ -41,7 +43,7 @@ fn run_monitor_loop(
                 if processed.elapsed() < std::time::Duration::from_millis(200) {
                     continue;
                 }
-                println!("uia_thread: Event Received");
+                log::debug!("uia_thread: Event Received");
 
                 // ゲームなど起きるIME変更の遅延の対策
                 for i in 0..3 {
@@ -81,15 +83,17 @@ struct ImeMonitor {
 
 impl ImeMonitor {
     fn new() -> anyhow::Result<Self> {
-        let (uia, cache_req) = uia_init().context("UIA初期化に失敗")?;
+        let (uia, cache_req) = uia_init().context("Failed to initialize UIA")?;
 
         let (root, tray_wnd, text_block) = unsafe {
-            let root = uia.GetRootElement().context("UIA取得に失敗: uia_thread")?;
+            let root = uia
+                .GetRootElement()
+                .context("Failed to load IUIAutomationElement")?;
 
             // タスクバーウィンドウを特定
             let tray_wnd = uia
                 .CreatePropertyCondition(UIA_ClassNamePropertyId, &VARIANT::from("Shell_TrayWnd"))
-                .context("Condition作成に失敗: uia_thread")?;
+                .context("Failed to create Shell_TrayWnd condition")?;
 
             // SystemTrayIcon内のテキストを特定
             let text_block = uia
@@ -97,7 +101,7 @@ impl ImeMonitor {
                     UIA_AutomationIdPropertyId,
                     &VARIANT::from("InnerTextBlock"),
                 )
-                .context("Condition作成に失敗: uia_thread")?;
+                .context("Failed to create InnerTextBlock condition")?;
 
             (root, tray_wnd, text_block)
         };
@@ -130,7 +134,7 @@ impl ImeMonitor {
             uia_el.FindAllBuildCache(TreeScope_Descendants, &self.text_block, &self.cache_req)
         }?;
 
-        let el = utils::find_element(&els, "InnerTextBlock")?;
+        let el = init::find_element(&els, "InnerTextBlock")?;
         let name = unsafe { el.CachedName() }?;
 
         Ok(InputMode::from_glyph(&name.to_string()))

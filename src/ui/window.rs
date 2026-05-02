@@ -1,6 +1,6 @@
 use crate::{
     common::{app_config::AppConfig, config},
-    ui::components::{appearance::appearance, fixed::Fixed, floating::Floating},
+    ui::components::{fixed::Fixed, floating::Floating, general::appearance},
 };
 use gpui::*;
 use gpui_component::{
@@ -47,18 +47,20 @@ impl Render for SettingsWindow {
             .sidebar_width(px(180.0))
             .pages(vec![
                 // ページ（左側のサイドバーメニュー）
-                SettingPage::new("General").default_open(true).groups(vec![
-                    // グループ（メイン領域のセクション）
-                    SettingGroup::new()
-                        .title("Appearance")
-                        .items(appearance(window, cx)),
-                    SettingGroup::new()
-                        .title("Fixed")
-                        .items(Fixed::fixed(&mut self.fixed)),
-                    SettingGroup::new()
-                        .title("Floating")
-                        .items(Floating::floating(&mut self.floating)),
-                ]),
+                SettingPage::new("Application")
+                    .default_open(true)
+                    .groups(vec![
+                        // グループ（メイン領域のセクション）
+                        SettingGroup::new()
+                            .title("General")
+                            .items(appearance(window, cx)),
+                        SettingGroup::new()
+                            .title("Fixed")
+                            .items(Fixed::fixed(&mut self.fixed)),
+                        SettingGroup::new()
+                            .title("Floating")
+                            .items(Floating::floating(&mut self.floating)),
+                    ]),
             ])
     }
 }

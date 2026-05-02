@@ -76,7 +76,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.font_size),
             )
-            .description("Font size: Min 5, Max 100, Default 14"),
+            .description("Font Size: Min 5, Max 100, Default 14"),
             SettingItem::new(
                 "Font Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -115,7 +115,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().active_role.as_ref().to_string()),
             )
-            .description("Enter text style: Default Full"),
+            .description("Text Style: Default Full"),
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -141,7 +141,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.padding),
             )
-            .description("Padding size: Min 0, Max 100, Default 5"),
+            .description("Padding: Min 0, Max 100, Default 5"),
             SettingItem::new(
                 "Opacity",
                 SettingField::number_input(
@@ -178,7 +178,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.offset.x),
             )
-            .description("Distance from the mouse:\nMin -50, Max 50, Default 20"),
+            .description("Distance from the mouse X:\nMin -50, Max 50, Default 20"),
             SettingItem::new(
                 "Offset Y",
                 SettingField::number_input(
@@ -196,7 +196,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.offset.y),
             )
-            .description("Distance from the mouse:\nMin -50, Max 50, Default 20"),
+            .description("Distance from the mouse Y:\nMin -50, Max 50, Default 20"),
         ]
     }
 }

@@ -127,6 +127,6 @@ pub fn set_window_popup(hwnd: HWND) -> anyhow::Result<()> {
 pub fn get_hwnd(has_handle: &impl HasWindowHandle) -> anyhow::Result<HWND> {
     match has_handle.window_handle()?.as_raw() {
         RawWindowHandle::Win32(h) => Ok(HWND(h.hwnd.get() as _)),
-        _ => Err(anyhow!("Not Win32")),
+        _ => Err(anyhow!("Not window_handle")),
     }
 }

@@ -76,7 +76,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.style.font_size),
             )
-            .description("Font size: Min 5, Max 100, Default 14"),
+            .description("Font Size: Min 5, Max 100, Default 14"),
             SettingItem::new(
                 "Font Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -115,7 +115,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().active_role.as_ref().to_string()),
             )
-            .description("Enter text style: Default Full"),
+            .description("Text Style: Default Full"),
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -141,7 +141,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.style.padding),
             )
-            .description("Padding size: Min 0, Max 100, Default 5"),
+            .description("Padding: Min 0, Max 100, Default 5"),
             SettingItem::new(
                 "Opacity",
                 SettingField::number_input(
@@ -190,7 +190,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.position.as_ref().to_string()),
             )
-            .description("Enter window position: Default Top"),
+            .description("Window Position: Default Top"),
             SettingItem::new(
                 "Margin",
                 SettingField::number_input(

@@ -33,7 +33,7 @@ impl InputMode {
 
             // 他のアイコン（Wi-Fi等）は無視
             _ => {
-                println!("Unknown IME Glyph detected: {:?}", glyph);
+                log::debug!("Unknown IME Glyph detected: {:?}", glyph);
                 Self::Unknown
             }
         }

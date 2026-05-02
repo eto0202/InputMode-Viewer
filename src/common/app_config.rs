@@ -1,4 +1,5 @@
-use gpui_component::ThemeMode;
+use gpui::App;
+use gpui_component::{Theme, ThemeMode};
 use palette::{FromColor, Srgba};
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, EnumIter, EnumString};
@@ -7,8 +8,8 @@ use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
     pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
-    pub auto_switch_theme: bool,
-    pub theme_mode: ThemeMode,
+    pub administrator: bool,
+    pub config_theme: ConfigTheme,
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ
     pub active_role: WindowRole,
@@ -18,8 +19,8 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             startup: false,
-            auto_switch_theme: false,
-            theme_mode: ThemeMode::Dark,
+            administrator: false,
+            config_theme: ConfigTheme::default(),
             floating: FloatingWindow::default(),
             fixed: FixedWindow::default(),
             active_role: WindowRole::Fixed,
@@ -197,4 +198,24 @@ pub enum WindowRole {
     #[default]
     Fixed,
     Floating,
+}
+
+#[derive(
+    Debug, Default, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, AsRefStr, EnumString,
+)]
+pub enum ConfigTheme {
+    #[default]
+    System,
+    Dark,
+    Light,
+}
+
+impl ConfigTheme {
+    pub fn theme_change(&self, cx: &mut App) {
+        match self {
+            ConfigTheme::System => Theme::sync_system_appearance(None, cx),
+            ConfigTheme::Dark => Theme::change(ThemeMode::Dark, None, cx),
+            ConfigTheme::Light => Theme::change(ThemeMode::Light, None, cx),
+        }
+    }
 }

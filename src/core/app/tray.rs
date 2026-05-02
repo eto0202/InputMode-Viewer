@@ -3,7 +3,7 @@ use tray_icon::{
     menu::{Menu, MenuItem},
 };
 
-use crate::core::app::utils;
+use crate::core::utils;
 
 pub const ID_QUIT: &str = "Quit";
 pub const ID_SETTING: &str = "Setting";
