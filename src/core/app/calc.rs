@@ -111,24 +111,25 @@ impl Default for VirtualScreen {
 }
 
 // Fixedウィンドウの物理座標を計算して返す
-pub fn calc_fixed_position(
+pub fn fixed_position(
     l_size: LogicalSize<f32>,
-    position: &WindowPos,
-    margin_logical: i32,
+    pos: &WindowPos,
+    l_margin: i32,
     info: &MONITORINFO,
-    scale: f64,
-) -> anyhow::Result<(i32, i32)> {
+    s: f64,
+) -> anyhow::Result<POINT> {
     let work_area = info.rcWork;
     // 論理サイズから物理サイズ・マージンへ変換
-    let p_width = (l_size.width as f64 * scale).ceil() as i32;
-    let p_height = (l_size.height as f64 * scale).ceil() as i32;
-    let margin = (margin_logical as f64 * scale).ceil() as i32;
+    let p_width = (l_size.width as f64 * s).ceil() as i32;
+    println!("p_width: {:?}", p_width);
+    let p_height = (l_size.height as f64 * s).ceil() as i32;
+    let margin = (l_margin as f64 * s).ceil() as i32;
 
     // 座標計算
     let wa_width = work_area.right - work_area.left;
     let wa_height = work_area.bottom - work_area.top;
 
-    let x = match position {
+    let x = match pos {
         // 左側（マージン分右へ）
         WindowPos::TopLeft | WindowPos::BottomLeft | WindowPos::CenterLeft => {
             work_area.left + margin
@@ -143,7 +144,7 @@ pub fn calc_fixed_position(
         }
     };
 
-    let y = match position {
+    let y = match pos {
         // 上側（マージン分下へ）
         WindowPos::Top | WindowPos::TopLeft | WindowPos::TopRight => work_area.top + margin,
         // 下側（下端から高さとマージン分上へ）
@@ -156,5 +157,5 @@ pub fn calc_fixed_position(
         }
     };
 
-    Ok((x, y))
+    Ok(POINT { x, y })
 }

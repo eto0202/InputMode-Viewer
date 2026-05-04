@@ -1,7 +1,6 @@
-use crate::{
-    core::app::{calculation::VirtualScreen, prelude::*},
-    guard_opt, guard_res,
-};
+use winit::event_loop::ControlFlow;
+
+use crate::core::app::{calc::VirtualScreen, prelude::*};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -50,105 +49,24 @@ impl ApplicationHandler<Message> for Controller {
         }
     }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        if let Err(e) = self.handle_window_event(el, id, event) {
-            log::error!("Window_event error during resume: {}", e);
+    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if let Err(e) = self.handle_window_event(el, event) {
+            log::error!("Window event error: {}", e);
             el.exit();
         }
     }
 
-    // 特にイベントがない時に何をするかを決定
-    // メインウィンドウが表示されている間は常に最新のマウス位置を追いかける
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        // タスクトレイイベント
-        if let Ok(e) = MenuEvent::receiver().try_recv() {
-            match e.id.as_ref() {
-                tray::ID_QUIT => el.exit(),
-                tray::ID_SETTING => {
-                    let _ = ui::spawn::spawn_settings_ui();
-                }
-                _ => {}
-            }
-        }
-
-        if self.state.displayed {
-            let core = guard_opt!(self.core.as_mut());
-            let cfg = core.cfg.read();
-            let mut pt = POINT::default();
-            let _ = unsafe { GetCursorPos(&mut pt) };
-
-            match cfg.active_role {
-                WindowRole::Floating => {
-                    let o = cfg.floating.offset;
-                    let (x, y) = (self.state.v_screen.x, self.state.v_screen.y);
-
-                    let _ = core.renderer.mouse_tracking(
-                        self.state.floating.x - x + o.x,
-                        self.state.floating.y - y + o.y,
-                        pt.x - x + o.x,
-                        pt.y - y + o.y,
-                    );
-                    (self.state.floating.x, self.state.floating.y) = (pt.x, pt.y);
-                }
-                WindowRole::Fixed => {
-                    let (info, scale) = guard_res!(calculation::monitor_info(pt));
-                    if let Ok((x, y)) = calculation::calc_fixed_position(
-                        core.mw.l_size,
-                        &cfg.fixed.position,
-                        cfg.fixed.margin,
-                        &info,
-                        scale,
-                    ) {
-                        let _ = core.renderer.set_position(
-                            (x - self.state.v_screen.x) as f32,
-                            (y - self.state.v_screen.y) as f32,
-                        );
-                        (self.state.fixed.x, self.state.fixed.y) = (x, y);
-                    }
-                }
-            }
-            core.mw.window.request_redraw();
+        if let Err(e) = self.handle_about_to_wait(el) {
+            log::error!("About to wait error: {}", e);
+            el.exit();
         }
     }
 
-    fn user_event(&mut self, _el: &ActiveEventLoop, msg: Message) {
-        match msg {
-            Message::Cap(cap) => {
-                self.state.cap = cap;
-            }
-            Message::Mode(mode) => {
-                // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
-                if self.state.mode != mode {
-                    let core = guard_opt!(self.core.as_mut());
-
-                    if let Ok(new_size) =
-                        AppCore::try_resize(&core.cfg, &core.renderer, mode, core.mw.role)
-                    {
-                        let _ = core
-                            .renderer
-                            .resize(new_size.width as u32, new_size.height as u32);
-                        core.mw.window.request_redraw();
-                    }
-                }
-
-                self.state.mode = mode;
-                self.state.displayed = match self.state.cap {
-                    InputCapability::No => false,
-                    InputCapability::Yes => self.state.mode != InputMode::Unknown,
-                    InputCapability::Unknown => self.state.mode.is_on(), // 不明の場合はONの時だけ表示
-                };
-            }
-            Message::ConfigUpdated => {
-                let new_cfg = config::load_config();
-
-                if let Some(cfg) = &self.cfg {
-                    let mut lock = cfg.write();
-                    *lock = new_cfg.clone();
-                    log::debug!("config updated!");
-                }
-                // 最新データを直接渡して反映させる
-                let _ = self.apply_config_to_all(&new_cfg);
-            }
+    fn user_event(&mut self, el: &ActiveEventLoop, msg: Message) {
+        if let Err(e) = self.handle_user_event(msg) {
+            log::error!("User event error: {}", e);
+            el.exit();
         }
     }
 }
@@ -173,40 +91,24 @@ impl Controller {
         Ok(())
     }
 
-    fn handle_window_event(
-        &mut self,
-        el: &ActiveEventLoop,
-        id: WindowId,
-        event: WindowEvent,
-    ) -> anyhow::Result<()> {
+    fn handle_window_event(&mut self, el: &ActiveEventLoop, e: WindowEvent) -> anyhow::Result<()> {
         let core = self.core.as_mut().context("AppCore missing")?;
-
-        // プロキシウィンドウのイベントなら無視
-        if id == core.proxy_window.id() {
-            // CloseRequestedなら処理
-            if let WindowEvent::CloseRequested = event {
-                el.exit();
-            }
-            return Ok(());
-        }
-
         // 表示判定
-        match event {
+        match e {
             WindowEvent::RedrawRequested => {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
+                let is_animation = core.mw.show_state.is_animation(self.state.displayed);
                 let (w, h) = core.renderer.calc_metrics(self.state.mode)?;
                 let (w, h) = (w + style.padding * 2.0, h + style.padding * 2.0);
-                let is_animation = core.mw.show_state.update(self.state.displayed);
 
                 if self.state.displayed {
                     core.renderer
                         .draw(self.state.mode, &style, w, h, style.padding)?;
 
                     if is_animation {
-                        core.renderer.fade_in(style.opacity)?
+                        core.renderer.fade_in(style.opacity)?;
                     }
                 } else {
-                    // 非表示なら画面外に飛ばし透明に
                     core.renderer.set_opacity(0.0)?;
                 }
             }
@@ -217,6 +119,97 @@ impl Controller {
                 el.exit();
             }
             _ => (),
+        }
+        Ok(())
+    }
+
+    fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        if self.state.displayed {
+            let core = self.core.as_ref().context("AppCore Missing")?;
+            let cfg = core.cfg.read();
+            let mut pt = POINT::default();
+            unsafe { GetCursorPos(&mut pt) }?;
+
+            match cfg.active_role {
+                WindowRole::Floating => {
+                    let o = cfg.floating.offset;
+                    let v_screen = self.state.v_screen;
+                    core.renderer.mouse_tracking(
+                        self.state.floating.x - v_screen.x + o.x,
+                        self.state.floating.y - v_screen.y + o.y,
+                        pt.x - v_screen.x + o.x,
+                        pt.y - v_screen.y + o.y,
+                    )?;
+                    self.state.floating = pt;
+                }
+                WindowRole::Fixed => {
+                    let (info, scale) = calc::monitor_info(pt)?;
+                    let pos = calc::fixed_position(
+                        core.mw.l_size,
+                        &cfg.fixed.pos,
+                        cfg.fixed.margin,
+                        &info,
+                        scale,
+                    )?;
+                    core.renderer.set_position(
+                        (pos.x - self.state.v_screen.x) as f32,
+                        (pos.y - self.state.v_screen.y) as f32,
+                    )?;
+                    self.state.fixed = pos;
+                }
+            }
+            core.mw.window.request_redraw();
+        }
+
+        // タスクトレイイベント
+        if let Ok(e) = MenuEvent::receiver().try_recv() {
+            match e.id.as_ref() {
+                tray::ID_QUIT => el.exit(),
+                tray::ID_SETTING => {
+                    let _ = ui::spawn::spawn_settings_ui();
+                }
+                _ => {}
+            }
+        };
+        Ok(())
+    }
+
+    fn handle_user_event(&mut self, msg: Message) -> anyhow::Result<()> {
+        match msg {
+            Message::Cap(cap) => {
+                self.state.cap = cap;
+            }
+            Message::Mode(mode) => {
+                // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
+                if self.state.mode != mode {
+                    let core = self.core.as_ref().context("AppCore Missing")?;
+
+                    if let Ok(new_size) =
+                        AppCore::try_resize(&core.cfg, &core.renderer, mode, core.mw.role)
+                    {
+                        core.renderer
+                            .resize(new_size.width as u32, new_size.height as u32)?;
+                        core.mw.window.request_redraw();
+                    }
+                }
+                self.state.mode = mode;
+                self.state.displayed = match self.state.cap {
+                    InputCapability::No => false,
+                    InputCapability::Yes => self.state.mode != InputMode::Unknown,
+                    InputCapability::Unknown => self.state.mode.is_on(), // 不明の場合はONの時だけ表示
+                };
+            }
+            Message::ConfigUpdated => {
+                let new_cfg = config::load_config();
+
+                if let Some(cfg) = &self.cfg {
+                    let mut lock = cfg.write();
+                    *lock = new_cfg.clone();
+                    log::debug!("config updated!");
+                }
+                // 最新データを直接渡して反映させる
+                let _ = self.apply_config_to_all(&new_cfg);
+            }
         }
         Ok(())
     }

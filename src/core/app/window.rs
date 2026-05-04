@@ -2,7 +2,7 @@ use winit::dpi::PhysicalPosition;
 
 use crate::core::app::prelude::*;
 
-pub struct ManagedWindow {
+pub struct MainWindow {
     pub window: Arc<Window>,
     pub hwnd: HWND,
     pub role: WindowRole,
@@ -10,7 +10,7 @@ pub struct ManagedWindow {
     pub l_size: LogicalSize<f32>,
 }
 
-impl ManagedWindow {
+impl MainWindow {
     pub fn new(
         el: &ActiveEventLoop,
         role: WindowRole,

@@ -6,9 +6,9 @@ pub use crate::{
     core::{
         app::{
             app_core::*,
-            calculation,
+            calc,
             controller::{self, Message},
-            managed::ManagedWindow,
+            window::MainWindow,
             prelude::ShowState,
             show_state::*,
             tray,

@@ -45,7 +45,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                 ],
                 |cx: &App| {
                     AppConfig::global(cx)
-                        .config_theme
+                        .cfg_theme
                         .as_ref()
                         .to_string()
                         .into()
@@ -56,11 +56,11 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                         .parse::<ConfigTheme>()
                         .unwrap_or(ConfigTheme::System);
                     mode.theme_change(cx);
-                    AppConfig::global_mut(cx).config_theme = mode;
+                    AppConfig::global_mut(cx).cfg_theme = mode;
                     let _ = config::save_config(AppConfig::global(cx));
                 },
             )
-            .default_value(AppConfig::default().config_theme.as_ref().to_string()),
+            .default_value(AppConfig::default().cfg_theme.as_ref().to_string()),
         )
         .description("Theme Mode: Default System"),
         SettingItem::new(

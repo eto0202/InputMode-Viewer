@@ -57,7 +57,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
 
                 cx.on_next_frame(w, |_, w, cx| {
                     cx.observe_window_appearance(w, |_, w, cx| {
-                        if AppConfig::global(cx).config_theme == ConfigTheme::System {
+                        if AppConfig::global(cx).cfg_theme == ConfigTheme::System {
                             let appearance = cx.window_appearance();
                             Theme::change(appearance, Some(w), cx);
                             cx.refresh_windows();
@@ -65,7 +65,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                     })
                     .detach();
 
-                    let mode = AppConfig::global(cx).config_theme;
+                    let mode = AppConfig::global(cx).cfg_theme;
                     mode.theme_change(cx);
 
                     match win32::get_hwnd(&w) {

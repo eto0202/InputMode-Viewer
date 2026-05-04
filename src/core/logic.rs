@@ -27,7 +27,7 @@ pub fn run() -> anyhow::Result<()> {
     let (tx_uia, rx_uia) = mpsc::channel();
     let (tx_input, rx_input) = mpsc::channel();
     let rx_hooks = hooks::win_hooks();
-    log::info!("Asynchronous channel created successfully");
+    log::info!("Hooks channel created successfully");
 
     // ディスパッチャー
     std::thread::spawn(move || -> anyhow::Result<()> {

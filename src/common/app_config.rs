@@ -9,7 +9,7 @@ use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F
 pub struct AppConfig {
     pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
     pub administrator: bool,
-    pub config_theme: ConfigTheme,
+    pub cfg_theme: ConfigTheme,
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ
     pub active_role: WindowRole,
@@ -20,7 +20,7 @@ impl Default for AppConfig {
         Self {
             startup: false,
             administrator: false,
-            config_theme: ConfigTheme::default(),
+            cfg_theme: ConfigTheme::default(),
             floating: FloatingWindow::default(),
             fixed: FixedWindow::default(),
             active_role: WindowRole::Fixed,
@@ -49,7 +49,7 @@ impl Default for FloatingWindow {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FixedWindow {
     pub role: WindowRole,
-    pub position: WindowPos, // 表示位置
+    pub pos: WindowPos, // 表示位置
     pub margin: i32,
     pub style: WindowStyle, // ウィンドウスタイル
 }
@@ -58,7 +58,7 @@ impl Default for FixedWindow {
     fn default() -> Self {
         Self {
             role: WindowRole::Fixed,
-            position: WindowPos::Top,
+            pos: WindowPos::Top,
             margin: 20,
             style: WindowStyle::default(),
         }

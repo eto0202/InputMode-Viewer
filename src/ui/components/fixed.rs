@@ -177,18 +177,18 @@ impl Fixed {
                     |cx: &App| {
                         AppConfig::global(cx)
                             .fixed
-                            .position
+                            .pos
                             .as_ref()
                             .to_string()
                             .into()
                     },
                     |val: SharedString, cx: &mut App| {
                         let pos = val.as_str().parse::<WindowPos>().unwrap_or(WindowPos::Top);
-                        AppConfig::global_mut(cx).fixed.position = pos;
+                        AppConfig::global_mut(cx).fixed.pos = pos;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
-                .default_value(AppConfig::default().fixed.position.as_ref().to_string()),
+                .default_value(AppConfig::default().fixed.pos.as_ref().to_string()),
             )
             .description("Window Position: Default Top"),
             SettingItem::new(
