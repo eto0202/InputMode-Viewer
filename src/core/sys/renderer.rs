@@ -404,7 +404,7 @@ impl DCompRenderer {
     }
 
     // 実際のフォントサイズを計算
-    pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<(f32, f32)> {
+    pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<DWRITE_TEXT_METRICS> {
         let text: Vec<u16> = mode
             .as_str_full()
             .encode_utf16()
@@ -423,7 +423,7 @@ impl DCompRenderer {
         };
 
         // DIP単位での幅と高さが取得できる
-        Ok((metrics.width, metrics.height))
+        Ok(metrics)
     }
 
     pub fn update_config(&mut self, style: &WindowStyle) -> anyhow::Result<()> {

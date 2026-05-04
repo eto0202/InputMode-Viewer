@@ -7,7 +7,6 @@ pub struct MainWindow {
     pub hwnd: HWND,
     pub role: WindowRole,
     pub show_state: ShowState,
-    pub l_size: LogicalSize<f32>,
 }
 
 impl MainWindow {
@@ -28,7 +27,6 @@ impl MainWindow {
             .with_inner_size(p_size);
 
         let window = Arc::new(el.create_window(attr)?);
-        let s = window.scale_factor();
         window.set_cursor_hittest(false)?;
         let hwnd = win32::get_hwnd(&window)?;
 
@@ -37,7 +35,6 @@ impl MainWindow {
             hwnd,
             role,
             show_state: ShowState::Hidden,
-            l_size: p_size.to_logical(s),
         })
     }
 }

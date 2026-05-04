@@ -1,5 +1,9 @@
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+use windows::Win32::{
+    Graphics::DirectWrite::DWRITE_TEXT_METRICS,
+    UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    },
 };
 
 use crate::{common::app_config::WindowPos, core::app::prelude::*};
@@ -112,18 +116,20 @@ impl Default for VirtualScreen {
 
 // Fixedウィンドウの物理座標を計算して返す
 pub fn fixed_position(
-    l_size: LogicalSize<f32>,
+    metrics: DWRITE_TEXT_METRICS,
     pos: &WindowPos,
-    l_margin: i32,
-    info: &MONITORINFO,
+    m: i32,
+    p: f32,
+    info: MONITORINFO,
     s: f64,
 ) -> anyhow::Result<POINT> {
     let work_area = info.rcWork;
-    // 論理サイズから物理サイズ・マージンへ変換
-    let p_width = (l_size.width as f64 * s).ceil() as i32;
-    println!("p_width: {:?}", p_width);
-    let p_height = (l_size.height as f64 * s).ceil() as i32;
-    let margin = (l_margin as f64 * s).ceil() as i32;
+
+    // visualの物理サイズ
+    let p_width = ((metrics.width as f64 + p as f64 * 2.0) * s).ceil() as i32;
+    let p_height = ((metrics.height as f64 + p as f64 * 2.0) * s).ceil() as i32;
+
+    let margin = (m as f64 * s).ceil() as i32;
 
     // 座標計算
     let wa_width = work_area.right - work_area.left;

@@ -1,4 +1,4 @@
-use winit::event_loop::ControlFlow;
+use windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_METRICS;
 
 use crate::core::app::{calc::VirtualScreen, prelude::*};
 
@@ -22,6 +22,7 @@ pub struct AppState {
     pub v_screen: VirtualScreen,
     pub floating: POINT,
     pub fixed: POINT,
+    pub metrics: DWRITE_TEXT_METRICS,
 }
 
 impl Default for Controller {
@@ -34,6 +35,7 @@ impl Default for Controller {
                 v_screen: VirtualScreen::default(),
                 floating: POINT::default(),
                 fixed: POINT::default(),
+                metrics: DWRITE_TEXT_METRICS::default(),
             },
             core: None,
             cfg: None,
@@ -98,8 +100,11 @@ impl Controller {
             WindowEvent::RedrawRequested => {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
                 let is_animation = core.mw.show_state.is_animation(self.state.displayed);
-                let (w, h) = core.renderer.calc_metrics(self.state.mode)?;
-                let (w, h) = (w + style.padding * 2.0, h + style.padding * 2.0);
+                let metrics = core.renderer.calc_metrics(self.state.mode)?;
+                let (w, h) = (
+                    metrics.width + style.padding * 2.0,
+                    metrics.height + style.padding * 2.0,
+                );
 
                 if self.state.displayed {
                     core.renderer
@@ -111,6 +116,7 @@ impl Controller {
                 } else {
                     core.renderer.set_opacity(0.0)?;
                 }
+                self.state.metrics = metrics;
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 self.state.v_screen = VirtualScreen::new();
@@ -143,14 +149,16 @@ impl Controller {
                     self.state.floating = pt;
                 }
                 WindowRole::Fixed => {
-                    let (info, scale) = calc::monitor_info(pt)?;
+                    let (info, s) = calc::monitor_info(pt)?;
                     let pos = calc::fixed_position(
-                        core.mw.l_size,
+                        self.state.metrics,
                         &cfg.fixed.pos,
                         cfg.fixed.margin,
-                        &info,
-                        scale,
+                        cfg.fixed.style.padding,
+                        info,
+                        s,
                     )?;
+                    // DCompの SetOffset はウィンドウの左上を0として計算する
                     core.renderer.set_position(
                         (pos.x - self.state.v_screen.x) as f32,
                         (pos.y - self.state.v_screen.y) as f32,
@@ -227,9 +235,12 @@ impl Controller {
         // Rendererのリソース（色、フォント）を更新
         core.renderer.update_config(style)?;
         // サイズの再計算とリサイズ
-        if let Ok((w, h)) = core.renderer.calc_metrics(self.state.mode) {
+        if let Ok(metrics) = core.renderer.calc_metrics(self.state.mode) {
             let p = style.padding;
-            let p_size = PhysicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
+            let p_size = PhysicalSize::new(
+                (metrics.width + p * 2.0).ceil(),
+                (metrics.height + p * 2.0).ceil(),
+            );
 
             core.renderer
                 .resize(p_size.width as u32, p_size.height as u32)?;

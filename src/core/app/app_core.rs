@@ -23,28 +23,21 @@ impl AppCore {
         let p_pos = PhysicalPosition::new(v_screen.x as f32, v_screen.y as f32);
         let p_size = PhysicalSize::new(v_screen.cx as f32, v_screen.cy as f32);
 
-        let mut mw = MainWindow::new(el, cfg.read().active_role, p_pos, p_size)?;
+        let mw = MainWindow::new(el, cfg.read().active_role, p_pos, p_size)?;
         log::info!("Create ManagedWindow successful");
 
         win32::set_window_style(mw.hwnd)?;
         log::info!("Set window style successful");
 
-        let (renderer, w, h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
+        let (renderer, _w, _h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
             .context("DCompRenderer Initialize Failed")?;
         log::info!("Create DCompRenderer successful");
-
-        mw.l_size = LogicalSize::new(w, h);
 
         // トレイアイコン
         let tray_icon = tray::tray_icon()?;
         log::info!("Create tray icon successful");
 
-        Ok(Self {
-            cfg,
-            tray_icon,
-            mw,
-            renderer,
-        })
+        Ok(Self { cfg, tray_icon, mw, renderer })
     }
 
     // モードが変化した時に、ウィンドウサイズを再計算
@@ -55,10 +48,13 @@ impl AppCore {
         role: WindowRole,
     ) -> anyhow::Result<PhysicalSize<f32>> {
         let style = AppCore::get_style(cfg, role)?;
-        let (w, h) = renderer.calc_metrics(mode)?;
+        let metrics = renderer.calc_metrics(mode)?;
 
         let p = style.padding;
-        let final_size = PhysicalSize::new((w + p * 2.0).ceil(), (h + p * 2.0).ceil());
+        let final_size = PhysicalSize::new(
+            (metrics.width + p * 2.0).ceil(),
+            (metrics.height + p * 2.0).ceil(),
+        );
 
         Ok(final_size)
     }
