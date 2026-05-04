@@ -96,7 +96,7 @@ pub enum WindowPos {
     BottomRight,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, AsRefStr, EnumString)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
 pub enum TextStyle {
     Compact,
     #[default]

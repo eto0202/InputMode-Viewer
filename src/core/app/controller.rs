@@ -1,4 +1,5 @@
 use windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_METRICS;
+use winit::event_loop::ControlFlow;
 
 use crate::core::app::{calc::VirtualScreen, prelude::*};
 
@@ -100,7 +101,7 @@ impl Controller {
             WindowEvent::RedrawRequested => {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
                 let is_animation = core.mw.show_state.is_animation(self.state.displayed);
-                let metrics = core.renderer.calc_metrics(self.state.mode)?;
+                let metrics = core.renderer.calc_metrics(self.state.mode, style.text_style)?;
                 let (w, h) = (
                     metrics.width + style.padding * 2.0,
                     metrics.height + style.padding * 2.0,
@@ -130,6 +131,7 @@ impl Controller {
     }
 
     fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        el.set_control_flow(ControlFlow::Wait);
         if self.state.displayed {
             let core = self.core.as_ref().context("AppCore Missing")?;
             let cfg = core.cfg.read();
@@ -158,7 +160,8 @@ impl Controller {
                         info,
                         s,
                     )?;
-                    // DCompの SetOffset はウィンドウの左上を0として計算する
+                    // DComp の SetOffset はウィンドウの左上を基準とした相対座標で計算
+                    // 画面全体を透明なウィンドウで覆っているため、- 仮想スクリーンのx,y軸
                     core.renderer.set_position(
                         (pos.x - self.state.v_screen.x) as f32,
                         (pos.y - self.state.v_screen.y) as f32,
@@ -235,7 +238,7 @@ impl Controller {
         // Rendererのリソース（色、フォント）を更新
         core.renderer.update_config(style)?;
         // サイズの再計算とリサイズ
-        if let Ok(metrics) = core.renderer.calc_metrics(self.state.mode) {
+        if let Ok(metrics) = core.renderer.calc_metrics(self.state.mode, style.text_style) {
             let p = style.padding;
             let p_size = PhysicalSize::new(
                 (metrics.width + p * 2.0).ceil(),

@@ -29,8 +29,9 @@ impl AppCore {
         win32::set_window_style(mw.hwnd)?;
         log::info!("Set window style successful");
 
-        let (renderer, _w, _h) = DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
-            .context("DCompRenderer Initialize Failed")?;
+        let (renderer, _w, _h) =
+            DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
+                .context("DCompRenderer Initialize Failed")?;
         log::info!("Create DCompRenderer successful");
 
         // トレイアイコン
@@ -48,7 +49,7 @@ impl AppCore {
         role: WindowRole,
     ) -> anyhow::Result<PhysicalSize<f32>> {
         let style = AppCore::get_style(cfg, role)?;
-        let metrics = renderer.calc_metrics(mode)?;
+        let metrics = renderer.calc_metrics(mode, style.text_style)?;
 
         let p = style.padding;
         let final_size = PhysicalSize::new(

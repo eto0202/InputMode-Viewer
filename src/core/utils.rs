@@ -68,12 +68,12 @@ pub fn init_logger() -> anyhow::Result<()> {
     let log_dir = proj_dirs.data_local_dir().join("logs");
 
     // ロガーの初期化
-    Logger::try_with_str("debug")? // 基本は info
+    Logger::try_with_str("info")?
         .log_to_file(FileSpec::default().directory(log_dir).basename("app"))
         .rotate(
             Criterion::Size(10 * 1024 * 1024), // 10MBごとに新しいファイルへ
             Naming::Timestamps,
-            Cleanup::KeepLogFiles(10), // 最新の3つだけ残して古いのは消す
+            Cleanup::KeepLogFiles(5), // 最新の3つだけ残して古いのは消す
         )
         .start()?;
 

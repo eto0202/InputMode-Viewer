@@ -153,10 +153,7 @@ impl DCompRenderer {
             format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
             // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
-            let str = match style.text_style {
-                TextStyle::Full => mode.as_str_full(),
-                TextStyle::Compact => mode.as_str_compact(),
-            };
+            let str = mode.as_str(style.text_style);
             let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
             let text_layout = dw_factory.CreateTextLayout(&text, &format, f32::MAX, f32::MAX)?;
 
@@ -305,10 +302,7 @@ impl DCompRenderer {
 
         // 文字列を取得
         // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
-        let str = match style.text_style {
-            TextStyle::Full => mode.as_str_full(),
-            TextStyle::Compact => mode.as_str_compact(),
-        };
+        let str = mode.as_str(style.text_style);
         let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
 
         // 描画命令
@@ -382,7 +376,7 @@ impl DCompRenderer {
 
     // マウス追従
     pub fn mouse_tracking(&self, cx: i32, cy: i32, tx: i32, ty: i32) -> anyhow::Result<()> {
-        let duration = 0.01f32;
+        let duration = 0.001f32;
         let anim_x = unsafe { self.dcomp_device.CreateAnimation() }?;
         let velocity_x = (tx - cx) as f32 / duration;
 
@@ -404,12 +398,13 @@ impl DCompRenderer {
     }
 
     // 実際のフォントサイズを計算
-    pub fn calc_metrics(&self, mode: InputMode) -> anyhow::Result<DWRITE_TEXT_METRICS> {
-        let text: Vec<u16> = mode
-            .as_str_full()
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
+    pub fn calc_metrics(
+        &self,
+        mode: InputMode,
+        s: TextStyle,
+    ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
+        let str = mode.as_str(s);
+        let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
 
         let mut metrics: DWRITE_TEXT_METRICS = Default::default();
 

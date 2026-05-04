@@ -7,6 +7,7 @@ use windows::Win32::UI::{
 use windows_core::{HSTRING, w};
 
 // TODO: デバック画面を実装し、未設定のグリフ、ログファイルを表示
+// バックグラウンドプロセスに
 
 fn main() -> anyhow::Result<()> {
     unsafe {

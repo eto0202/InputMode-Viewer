@@ -1,3 +1,5 @@
+use crate::common::app_config::TextStyle;
+
 pub const GLYPH_HIRAGANA: &str = "\u{e986}";
 pub const GLYPH_HALF_ALPHA_1: &str = "\u{e97e}";
 pub const GLYPH_HALF_ALPHA_2: &str = "\u{e982}";
@@ -40,7 +42,14 @@ impl InputMode {
     }
 
     // 表示用テキストを取得
-    pub fn as_str_full(&self) -> &'static str {
+    pub fn as_str(&self, text_style: TextStyle) -> &'static str {
+        match text_style {
+            TextStyle::Full => self.as_str_full(),
+            TextStyle::Compact => self.as_str_compact(),
+        }
+    }
+
+    fn as_str_full(&self) -> &'static str {
         match self {
             Self::Hiragana => "ひらがな (あ)",
             Self::HalfAlpha => "半角英数 (A)",
@@ -51,7 +60,7 @@ impl InputMode {
         }
     }
 
-    pub fn as_str_compact(&self) -> &'static str {
+    fn as_str_compact(&self) -> &'static str {
         match self {
             Self::Hiragana => "あ",
             Self::HalfAlpha => "A",
