@@ -1,3 +1,7 @@
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+};
+
 use crate::{common::app_config::WindowPos, core::app::prelude::*};
 
 // 座標計算
@@ -55,50 +59,69 @@ pub fn set_predicted_position(
 }
 
 // モニターサイズを取得
-pub fn monitor_info() -> anyhow::Result<(MONITORINFO, f64)> {
-    let mut pt = POINT::default();
-    unsafe {
-        GetCursorPos(&mut pt).ok();
-    }
-
-    let hmonitor = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) };
-
+pub fn monitor_info(pt: POINT) -> anyhow::Result<(MONITORINFO, f64)> {
     // モニターのワークエリアを取得
     let mut info = MONITORINFO {
         cbSize: std::mem::size_of::<MONITORINFO>() as u32,
         ..Default::default()
     };
-    if !unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
-        anyhow::bail!("Failed to get monitor info");
-    }
 
     // モニターのDPIスケールを取得
     let mut dpi_x = 0;
     let mut dpi_y = 0;
-    let scale = if unsafe { GetDpiForMonitor(hmonitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) }
-        .is_ok()
-    {
-        dpi_x as f64 / 96.0
-    } else {
-        1.0
+
+    let s = unsafe {
+        let h = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        if !GetMonitorInfoW(h, &mut info).as_bool() {
+            anyhow::bail!("Failed to get monitor info");
+        }
+        if GetDpiForMonitor(h, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y).is_ok() {
+            dpi_x as f64 / 96.0
+        } else {
+            1.0
+        }
     };
 
-    Ok((info, scale))
+    Ok((info, s))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VirtualScreen {
+    pub x: i32,
+    pub y: i32,
+    pub cx: i32,
+    pub cy: i32,
+}
+impl VirtualScreen {
+    pub fn new() -> Self {
+        VirtualScreen::default()
+    }
+}
+impl Default for VirtualScreen {
+    fn default() -> Self {
+        unsafe {
+            Self {
+                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+                cx: GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                cy: GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            }
+        }
+    }
 }
 
 // Fixedウィンドウの物理座標を計算して返す
 pub fn calc_fixed_position(
-    logical_width: f32,
-    logical_height: f32,
+    l_size: LogicalSize<f32>,
     position: &WindowPos,
     margin_logical: i32,
-    info: MONITORINFO,
+    info: &MONITORINFO,
     scale: f64,
 ) -> anyhow::Result<(i32, i32)> {
     let work_area = info.rcWork;
     // 論理サイズから物理サイズ・マージンへ変換
-    let p_width = (logical_width as f64 * scale).ceil() as i32;
-    let p_height = (logical_height as f64 * scale).ceil() as i32;
+    let p_width = (l_size.width as f64 * scale).ceil() as i32;
+    let p_height = (l_size.height as f64 * scale).ceil() as i32;
     let margin = (margin_logical as f64 * scale).ceil() as i32;
 
     // 座標計算

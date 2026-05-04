@@ -1,4 +1,6 @@
-use crate::core::app::prelude::*;
+use winit::dpi::PhysicalPosition;
+
+use crate::core::app::{calculation::VirtualScreen, prelude::*};
 
 pub struct AppCore {
     pub cfg: Arc<RwLock<AppConfig>>,
@@ -13,6 +15,7 @@ impl AppCore {
         el: &ActiveEventLoop,
         cfg: Arc<RwLock<AppConfig>>,
         mode: InputMode,
+        v_screen: VirtualScreen,
     ) -> anyhow::Result<Self> {
         // プロキシウィンドウを作成
         // メインウィンドウを消した時にアプリ自体が終了してしまうことがあるため
@@ -24,13 +27,16 @@ impl AppCore {
             .with_decorations(false)
             .with_max_inner_size(LogicalSize::new(1, 1))
             .with_position(LogicalPosition::new(0, 0));
+
         let proxy_window = el.create_window(attr)?;
         log::info!("Create ProxyWindow successful");
 
         let style = AppCore::get_style(&cfg, cfg.read().active_role)?;
 
-        let (info, _scale) = calculation::monitor_info()?;
-        let mut mw = ManagedWindow::new(el, cfg.read().active_role, info)?;
+        let p_pos = PhysicalPosition::new(v_screen.x as f32, v_screen.y as f32);
+        let p_size = PhysicalSize::new(v_screen.cx as f32, v_screen.cy as f32);
+
+        let mut mw = ManagedWindow::new(el, cfg.read().active_role, p_pos, p_size)?;
         log::info!("Create ManagedWindow successful");
 
         win32::set_window_style(mw.hwnd)?;

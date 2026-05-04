@@ -1,5 +1,5 @@
 use crate::{
-    common::app_config::{ TextStyle, WindowStyle},
+    common::app_config::{TextStyle, WindowStyle},
     core::sys::uia::text::InputMode,
 };
 use anyhow::Context;
@@ -349,6 +349,57 @@ impl DCompRenderer {
             self.dcomp_effect_group.SetOpacity2(opacity)?;
             self.dcomp_device.Commit()?
         };
+        Ok(())
+    }
+
+    // フェードイン
+    pub fn fade_in(&self, opacity: f32) -> anyhow::Result<()> {
+        let animation = unsafe { self.dcomp_device.CreateAnimation() }?;
+        let duration = 0.16f64;
+        let start_value = 0.0f32;
+
+        // 1次係数（速度）を計算： (終点 - 始点) / 時間
+        let linear_velocity = (opacity - start_value) / duration as f32;
+
+        unsafe {
+            // 線形移動の定義
+            animation.AddCubic(
+                0.0,             // 0秒から開始
+                start_value,     // 開始時の値
+                linear_velocity, // 1秒あたりの変化量
+                0.0,             // 2次係数 (加速させないなら0)
+                0.0,             // 3次係数 (0)
+            )?;
+
+            // 値を固定しアニメーションを完成
+            animation.End(duration, opacity)?;
+            // アニメーションを適用
+            self.dcomp_effect_group.SetOpacity(&animation)?;
+            self.dcomp_device.Commit()?;
+        }
+        Ok(())
+    }
+
+    // マウス追従
+    pub fn mouse_tracking(&self, cx: i32, cy: i32, tx: i32, ty: i32) -> anyhow::Result<()> {
+        let duration = 0.01f32;
+        let anim_x = unsafe { self.dcomp_device.CreateAnimation() }?;
+        let velocity_x = (tx - cx) as f32 / duration;
+
+        let anim_y = unsafe { self.dcomp_device.CreateAnimation() }?;
+        let velocity_y = (ty - cy) as f32 / duration;
+
+        unsafe {
+            anim_x.AddCubic(0.0, cx as f32, velocity_x, 0.0, 0.0)?;
+            anim_x.End(duration as f64, tx as f32)?;
+            self.dcomp_visual.SetOffsetX(&anim_x)?;
+
+            anim_y.AddCubic(0.0, cy as f32, velocity_y, 0.0, 0.0)?;
+            anim_y.End(duration as f64, ty as f32)?;
+            self.dcomp_visual.SetOffsetY(&anim_y)?;
+
+            self.dcomp_device.Commit()?;
+        }
         Ok(())
     }
 

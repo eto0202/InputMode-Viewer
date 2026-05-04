@@ -1,4 +1,7 @@
-use crate::{core::app::prelude::*, guard_opt, guard_res};
+use crate::{
+    core::app::{calculation::VirtualScreen, prelude::*},
+    guard_opt, guard_res,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -17,10 +20,9 @@ pub struct AppState {
     pub cap: InputCapability,
     pub mode: InputMode,
     pub displayed: bool,
-    pub mx: i32, // マウス座標
-    pub my: i32,
-    pub wx: i32, // ウィンドウ座標
-    pub wy: i32,
+    pub v_screen: VirtualScreen,
+    pub floating: POINT,
+    pub fixed: POINT,
 }
 
 impl Default for Controller {
@@ -30,10 +32,9 @@ impl Default for Controller {
                 cap: InputCapability::Unknown,
                 mode: InputMode::Unknown,
                 displayed: false,
-                mx: 0,
-                my: 0,
-                wx: 0,
-                wy: 0,
+                v_screen: VirtualScreen::default(),
+                floating: POINT::default(),
+                fixed: POINT::default(),
             },
             core: None,
             cfg: None,
@@ -59,7 +60,6 @@ impl ApplicationHandler<Message> for Controller {
     // 特にイベントがない時に何をするかを決定
     // メインウィンドウが表示されている間は常に最新のマウス位置を追いかける
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        let core = guard_opt!(self.core.as_mut());
         // タスクトレイイベント
         if let Ok(e) = MenuEvent::receiver().try_recv() {
             match e.id.as_ref() {
@@ -72,66 +72,42 @@ impl ApplicationHandler<Message> for Controller {
         }
 
         if self.state.displayed {
+            let core = guard_opt!(self.core.as_mut());
             let cfg = core.cfg.read();
-            let (info, scale) = guard_res!(calculation::monitor_info());
+            let mut pt = POINT::default();
+            let _ = unsafe { GetCursorPos(&mut pt) };
 
             match cfg.active_role {
                 WindowRole::Floating => {
-                    el.set_control_flow(winit::event_loop::ControlFlow::Poll);
-                    unsafe {
-                        let _ = WaitForSingleObject(core.renderer.waitable_object, 1000);
-                    };
+                    let o = cfg.floating.offset;
+                    let (x, y) = (self.state.v_screen.x, self.state.v_screen.y);
 
-                    let _ = win32::set_window_position(
-                        core.mw.hwnd,
-                        info.rcMonitor.left,
-                        info.rcMonitor.top,
-                        info.rcMonitor.right - info.rcMonitor.left,
-                        info.rcMonitor.bottom - info.rcMonitor.top,
+                    let _ = core.renderer.mouse_tracking(
+                        self.state.floating.x - x + o.x,
+                        self.state.floating.y - y + o.y,
+                        pt.x - x + o.x,
+                        pt.y - y + o.y,
                     );
-
-                    let (cur_x, cur_y, x, y) = calculation::set_predicted_position(
-                        self.state.mx,
-                        self.state.my,
-                        core.mw.window.scale_factor(),
-                        cfg.floating.offset,
-                    );
-                    let _ = core.renderer.set_position(
-                        (x - info.rcMonitor.left) as f32,
-                        (y - info.rcMonitor.top) as f32,
-                    );
-                    (self.state.mx, self.state.my) = (cur_x, cur_y);
+                    (self.state.floating.x, self.state.floating.y) = (pt.x, pt.y);
                 }
                 WindowRole::Fixed => {
-                    el.set_control_flow(winit::event_loop::ControlFlow::Wait);
-
-                    let _ = win32::set_window_position(
-                        core.mw.hwnd,
-                        info.rcMonitor.left,
-                        info.rcMonitor.top,
-                        info.rcMonitor.right - info.rcMonitor.left,
-                        info.rcMonitor.bottom - info.rcMonitor.top,
-                    );
-
+                    let (info, scale) = guard_res!(calculation::monitor_info(pt));
                     if let Ok((x, y)) = calculation::calc_fixed_position(
-                        core.mw.l_size.width,
-                        core.mw.l_size.height,
+                        core.mw.l_size,
                         &cfg.fixed.position,
                         cfg.fixed.margin,
-                        info,
+                        &info,
                         scale,
                     ) {
                         let _ = core.renderer.set_position(
-                            (x - info.rcMonitor.left) as f32,
-                            (y - info.rcMonitor.top) as f32,
+                            (x - self.state.v_screen.x) as f32,
+                            (y - self.state.v_screen.y) as f32,
                         );
-                        (self.state.wx, self.state.wy) = (x, y);
+                        (self.state.fixed.x, self.state.fixed.y) = (x, y);
                     }
                 }
             }
             core.mw.window.request_redraw();
-        } else {
-            el.set_control_flow(winit::event_loop::ControlFlow::Wait);
         }
     }
 
@@ -183,16 +159,15 @@ impl Controller {
             return Ok(());
         }
 
+        self.state.v_screen = VirtualScreen::new();
+
         let cfg = self.cfg.as_ref().context("AppCore missing")?;
-        let core = AppCore::new(el, cfg.clone(), self.state.mode)?;
+        let core = AppCore::new(el, cfg.clone(), self.state.mode, self.state.v_screen)?;
         log::info!("AppCore initialized");
 
         // ウィンドウを描画
         core.renderer.set_opacity(0.0)?;
-        core.renderer.set_position(-10000.0, -10000.0)?;
-
         core.mw.window.request_redraw();
-
         self.core = Some(core);
 
         Ok(())
@@ -221,26 +196,22 @@ impl Controller {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
                 let (w, h) = core.renderer.calc_metrics(self.state.mode)?;
                 let (w, h) = (w + style.padding * 2.0, h + style.padding * 2.0);
-                let (opacity, is_animating) = core.mw.show_state.update(
-                    Duration::from_millis(160),
-                    self.state.displayed,
-                    style.opacity,
-                );
+                let is_animation = core.mw.show_state.update(self.state.displayed);
 
                 if self.state.displayed {
-                    core.renderer.set_opacity(opacity)?;
                     core.renderer
                         .draw(self.state.mode, &style, w, h, style.padding)?;
 
-                    // アニメーション中のみ再描画を予約
-                    if is_animating {
-                        core.mw.window.request_redraw();
+                    if is_animation {
+                        core.renderer.fade_in(style.opacity)?
                     }
                 } else {
                     // 非表示なら画面外に飛ばし透明に
                     core.renderer.set_opacity(0.0)?;
-                    core.renderer.set_position(-10000.0, -10000.0)?;
                 }
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                self.state.v_screen = VirtualScreen::new();
             }
             WindowEvent::CloseRequested => {
                 el.exit();

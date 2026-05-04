@@ -1,3 +1,5 @@
+use winit::dpi::PhysicalPosition;
+
 use crate::core::app::prelude::*;
 
 pub struct ManagedWindow {
@@ -9,12 +11,12 @@ pub struct ManagedWindow {
 }
 
 impl ManagedWindow {
-    pub fn new(el: &ActiveEventLoop, role: WindowRole, info: MONITORINFO) -> anyhow::Result<Self> {
-        let l_size = LogicalSize::new(
-            (info.rcMonitor.right - info.rcMonitor.left) as f32,
-            (info.rcMonitor.bottom - info.rcMonitor.top) as f32,
-        );
-        // 共通の属性定義
+    pub fn new(
+        el: &ActiveEventLoop,
+        role: WindowRole,
+        p_pos: PhysicalPosition<f32>,
+        p_size: PhysicalSize<f32>,
+    ) -> anyhow::Result<Self> {
         let attr = WindowAttributes::default()
             .with_decorations(false)
             .with_transparent(true)
@@ -22,10 +24,11 @@ impl ManagedWindow {
             .with_active(false)
             .with_skip_taskbar(true)
             .with_no_redirection_bitmap(false)
-            .with_position(Position::Logical(LogicalPosition::new(0.0, 0.0)))
-            .with_inner_size(l_size);
+            .with_position(p_pos)
+            .with_inner_size(p_size);
 
         let window = Arc::new(el.create_window(attr)?);
+        let s = window.scale_factor();
         window.set_cursor_hittest(false)?;
         let hwnd = win32::get_hwnd(&window)?;
 
@@ -34,7 +37,7 @@ impl ManagedWindow {
             hwnd,
             role,
             show_state: ShowState::Hidden,
-            l_size,
+            l_size: p_size.to_logical(s),
         })
     }
 }

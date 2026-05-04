@@ -1,11 +1,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use input_mode_viewer::{core::utils, run::app_run};
-use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+use windows::Win32::UI::{
+    HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
+    WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
+};
 use windows_core::{HSTRING, w};
 
 // TODO: デバック画面を実装し、未設定のグリフ、ログファイルを表示
 
 fn main() -> anyhow::Result<()> {
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+
     utils::init_logger()?;
     log::info!("Logger initialized successful");
 
