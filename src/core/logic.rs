@@ -44,7 +44,7 @@ pub fn run() -> anyhow::Result<()> {
 
     mode::mode_thread(proxy_uia, rx_uia);
     cap::cap_thread(proxy_input, rx_input);
-    log::info!("Mode thread and Cap thread successful");
+    log::info!("Mode and Cap thread and Cap thread successful");
 
     let proxy_watcher = proxy.clone();
     let _watcher = spawn_config_watcher(proxy_watcher)?;

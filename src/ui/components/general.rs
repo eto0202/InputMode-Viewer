@@ -3,7 +3,7 @@ use crate::{
         app_config::{AppConfig, ConfigTheme, WindowRole},
         config,
     },
-    ui::{utils, window::SettingsWindow},
+    ui::window::SettingsWindow,
 };
 use gpui::{App, Context, SharedString, *};
 use gpui_component::setting::{SettingField, SettingItem};
@@ -17,9 +17,6 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                 |val: bool, cx: &mut App| {
                     AppConfig::global_mut(cx).administrator = val;
                     let _ = config::save_config(AppConfig::global(cx));
-                    if val && AppConfig::global(cx).administrator {
-                        let _ = utils::restart_as_admin_for_gpui(cx);
-                    }
                 },
             ),
         )
@@ -43,13 +40,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                     (ConfigTheme::Dark.as_ref().into(), "Dark".into()),
                     (ConfigTheme::Light.as_ref().into(), "Light".into()),
                 ],
-                |cx: &App| {
-                    AppConfig::global(cx)
-                        .cfg_theme
-                        .as_ref()
-                        .to_string()
-                        .into()
-                },
+                |cx: &App| AppConfig::global(cx).cfg_theme.as_ref().to_string().into(),
                 |val: SharedString, cx: &mut App| {
                     let mode = val
                         .as_str()

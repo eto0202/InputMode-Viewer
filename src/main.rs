@@ -39,6 +39,8 @@ fn main() -> anyhow::Result<()> {
         log::error!("PANIC occurred at {}: {}", location, message);
     }));
 
+    log::info!("Set panic hook successful");
+
     if let Err(e) = app_run() {
         let error_msg = format!("{:?}", e);
         log::error!("Fatal error: {}", error_msg);

@@ -7,12 +7,15 @@ use crate::core::{
 };
 use anyhow::Context;
 use std::{sync::*, thread};
-use windows::Win32::{System::Variant::VARIANT, UI::Accessibility::*};
+use windows::Win32::{
+    System::{Com::COINIT_MULTITHREADED, Variant::VARIANT},
+    UI::Accessibility::*,
+};
 use winit::event_loop::EventLoopProxy;
 
 pub fn mode_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
-        let _guard = com::ComGuard::new();
+        let _guard = com::ComGuard::new(COINIT_MULTITHREADED);
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_monitor_loop(&proxy, &rx) {

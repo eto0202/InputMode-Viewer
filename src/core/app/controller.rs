@@ -1,7 +1,10 @@
 use windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_METRICS;
 use winit::event_loop::ControlFlow;
 
-use crate::core::app::{calc::VirtualScreen, prelude::*};
+use crate::core::{
+    app::{calc::VirtualScreen, prelude::*},
+    utils,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -101,7 +104,9 @@ impl Controller {
             WindowEvent::RedrawRequested => {
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
                 let is_animation = core.mw.show_state.is_animation(self.state.displayed);
-                let metrics = core.renderer.calc_metrics(self.state.mode, style.text_style)?;
+                let metrics = core
+                    .renderer
+                    .calc_metrics(self.state.mode, style.text_style)?;
                 let (w, h) = (
                     metrics.width + style.padding * 2.0,
                     metrics.height + style.padding * 2.0,
@@ -213,13 +218,52 @@ impl Controller {
             Message::ConfigUpdated => {
                 let new_cfg = config::load_config();
 
+                let mut admin_changed = false;
+                let mut startup_changed = false;
+
                 if let Some(cfg) = &self.cfg {
                     let mut lock = cfg.write();
+
+                    admin_changed = lock.administrator != new_cfg.administrator;
+                    startup_changed = lock.startup != new_cfg.startup;
+
                     *lock = new_cfg.clone();
                     log::debug!("config updated!");
                 }
                 // 最新データを直接渡して反映させる
-                let _ = self.apply_config_to_all(&new_cfg);
+                self.apply_config_to_all(&new_cfg)?;
+
+                let current_elevated = check_elevation::is_elevated().unwrap_or(false);
+
+                if admin_changed {
+                    log::info!("Administrator setting changed. Restarting...");
+                    if new_cfg.administrator != current_elevated {
+                        // 権限降格
+                        log::info!("Dropping privileges via explorer.exe...");
+                        utils::restart_application(true);
+                    } else {
+                        utils::restart_application(false);
+                    }
+                    return Ok(());
+                }
+
+                if startup_changed {
+                    if utils::elevated_check() {
+                        if new_cfg.startup {
+                            log::info!("Syncing startup task imme diately (Admin mode)");
+                            utils::register_startup_task(true)?;
+                        } else {
+                            utils::unregister_startup_task()?;
+                        }
+                    } else if new_cfg.startup {
+                        // タスク登録（管理者権限が必要）のため昇格再起動が必要
+                        log::info!("Startup enabled in normal mode. Restarting for elevation...");
+                        utils::restart_application(false);
+                    } else {
+                        log::info!("Startup disabled in normal mode. Restarting for elevation...");
+                        utils::restart_application(false);
+                    }
+                }
             }
         }
         Ok(())
@@ -238,7 +282,10 @@ impl Controller {
         // Rendererのリソース（色、フォント）を更新
         core.renderer.update_config(style)?;
         // サイズの再計算とリサイズ
-        if let Ok(metrics) = core.renderer.calc_metrics(self.state.mode, style.text_style) {
+        if let Ok(metrics) = core
+            .renderer
+            .calc_metrics(self.state.mode, style.text_style)
+        {
             let p = style.padding;
             let p_size = PhysicalSize::new(
                 (metrics.width + p * 2.0).ceil(),

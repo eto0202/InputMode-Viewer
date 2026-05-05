@@ -12,7 +12,7 @@ use anyhow::Context;
 use std::sync::mpsc;
 use std::thread;
 use windows::{
-    Win32::UI::{Accessibility::*, Input::Ime::*, WindowsAndMessaging::*},
+    Win32::{System::Com::{COINIT_MULTITHREADED}, UI::{Accessibility::*, Input::Ime::*, WindowsAndMessaging::*}},
     core::Interface,
 };
 use winit::event_loop::EventLoopProxy;
@@ -36,7 +36,7 @@ impl InputCapability {
 
 pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
-        let _guard = com::ComGuard::new();
+        let _guard = com::ComGuard::new(COINIT_MULTITHREADED);
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_cap_monitor(&proxy, &rx) {
