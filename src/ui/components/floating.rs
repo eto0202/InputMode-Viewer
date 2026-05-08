@@ -12,47 +12,53 @@ use gpui_component::{
 };
 
 pub struct Floating {
-    pub bg_state: Entity<ColorPickerState>,
-    pub bg_color: Option<Hsla>,
+    pub bg_color: Entity<ColorPickerState>,
+    pub bg_selected_color: Option<Hsla>,
 
-    pub font_state: Entity<ColorPickerState>,
-    pub font_color: Option<Hsla>,
+    pub font_color: Entity<ColorPickerState>,
+    pub font_selected_color: Option<Hsla>,
 
     pub subscriptions: Vec<Subscription>,
 }
 
 impl Floating {
     pub fn new(window: &mut Window, cx: &mut Context<SettingsWindow>) -> Self {
-        let bg_color = AppConfig::global(cx).floating.style.bg_color.to_hsla();
-        let font_color = AppConfig::global(cx).floating.style.font_color.to_hsla();
+        let default_style = AppConfig::default().fixed.style;
 
-        let bg_state = cx.new(|cx| ColorPickerState::new(window, cx).default_value(bg_color));
-        let font_state = cx.new(|cx| ColorPickerState::new(window, cx).default_value(font_color));
+        let bg_selected_color = AppConfig::global(cx).floating.style.bg_color.to_hsla();
+        let bg_color = cx.new(|cx| {
+            ColorPickerState::new(window, cx).default_value(default_style.bg_color.to_hsla())
+        });
+
+        let font_selected_color = AppConfig::global(cx).floating.style.font_color.to_hsla();
+        let font_color = cx.new(|cx| {
+            ColorPickerState::new(window, cx).default_value(default_style.font_color.to_hsla())
+        });
 
         let subscriptions = vec![
-            cx.subscribe(&bg_state, |this, _, ev, cx| match ev {
+            cx.subscribe(&bg_color, |this, _, ev, cx| match ev {
                 ColorPickerEvent::Change(color) => {
                     AppConfig::global_mut(cx).floating.style.bg_color =
                         color.unwrap_or_default().to_d2d1_color();
-                    this.floating.bg_color = *color;
+                    this.floating.bg_selected_color = *color;
                     let _ = config::save_config(AppConfig::global(cx));
                 }
             }),
-            cx.subscribe(&font_state, |this, _, ev, cx| match ev {
+            cx.subscribe(&font_color, |this, _, ev, cx| match ev {
                 ColorPickerEvent::Change(color) => {
                     AppConfig::global_mut(cx).floating.style.font_color =
                         color.unwrap_or_default().to_d2d1_color();
-                    this.floating.font_color = *color;
+                    this.floating.font_selected_color = *color;
                     let _ = config::save_config(AppConfig::global(cx));
                 }
             }),
         ];
 
         Self {
-            bg_state,
-            bg_color: Some(bg_color),
-            font_state,
-            font_color: Some(font_color),
+            bg_color,
+            bg_selected_color: Some(bg_selected_color),
+            font_color,
+            font_selected_color: Some(font_selected_color),
             subscriptions,
         }
     }
@@ -80,8 +86,8 @@ impl Floating {
             SettingItem::new(
                 "Font Color",
                 SettingField::element(ColorPickerSettingItem::new(
-                    self.font_state.clone(),
-                    self.font_color,
+                    self.font_color.clone(),
+                    self.font_selected_color,
                 )),
             )
             .description("Font Color: Default #F2F2F2"),
@@ -119,8 +125,8 @@ impl Floating {
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
-                    self.bg_state.clone(),
-                    self.bg_color,
+                    self.bg_color.clone(),
+                    self.font_selected_color,
                 )),
             )
             .description("Background Color: Default #333333"),

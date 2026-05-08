@@ -1,19 +1,18 @@
-use gpui::{prelude::FluentBuilder, *};
+use gpui::{Window, prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, Colorize, Sizable,
     color_picker::{ColorPicker, ColorPickerState},
-    h_flex,
     setting::{RenderOptions, SettingFieldElement},
+    *,
 };
 
 pub struct ColorPickerSettingItem {
-    state: Entity<ColorPickerState>,
-    color: Option<Hsla>,
+    color: Entity<ColorPickerState>,
+    selected_color: Option<Hsla>,
 }
 
 impl ColorPickerSettingItem {
-    pub fn new(state: Entity<ColorPickerState>, color: Option<Hsla>) -> Self {
-        Self { state, color }
+    pub fn new(color: Entity<ColorPickerState>, selected_color: Option<Hsla>) -> Self {
+        Self { color, selected_color }
     }
 }
 
@@ -30,8 +29,10 @@ impl SettingFieldElement for ColorPickerSettingItem {
             .child(
                 h_flex()
                     .justify_around()
-                    .child(ColorPicker::new(&self.state).small())
-                    .when_some(self.color, |this, color| this.w_24().child(color.to_hex())),
+                    .child(ColorPicker::new(&self.color).small())
+                    .when_some(self.selected_color, |this, color| {
+                        this.w_24().child(color.to_hex())
+                    }),
             )
     }
 }

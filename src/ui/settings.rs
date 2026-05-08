@@ -45,44 +45,46 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    Application::new().with_assets(Assets).run(move |cx| {
-        gpui_component::init(cx);
+    gpui_platform::application()
+        .with_assets(Assets)
+        .run(move |cx| {
+            gpui_component::init(cx);
 
-        if let Err(e) = cx.open_window(options, |w, cx| {
-            let s_v = cx.new(|cx| window::SettingsWindow::new(w, cx));
-            log::info!("Create SettingsWindow successful");
-            cx.new(|cx| {
-                let root = Root::new(s_v, w, cx);
-                log::info!("Create Root successful");
+            if let Err(e) = cx.open_window(options, |w, cx| {
+                let s_v = cx.new(|cx| window::SettingsWindow::new(w, cx));
+                log::info!("Create SettingsWindow successful");
+                cx.new(|cx| {
+                    let root = Root::new(s_v, w, cx);
+                    log::info!("Create Root successful");
 
-                cx.on_next_frame(w, |_, w, cx| {
-                    cx.observe_window_appearance(w, |_, w, cx| {
-                        if AppConfig::global(cx).cfg_theme == ConfigTheme::System {
-                            let appearance = cx.window_appearance();
-                            Theme::change(appearance, Some(w), cx);
-                            cx.refresh_windows();
+                    cx.on_next_frame(w, |_, w, cx| {
+                        cx.observe_window_appearance(w, |_, w, cx| {
+                            if AppConfig::global(cx).cfg_theme == ConfigTheme::System {
+                                let appearance = cx.window_appearance();
+                                Theme::change(appearance, Some(w), cx);
+                                cx.refresh_windows();
+                            }
+                        })
+                        .detach();
+                        
+                        let mode = AppConfig::global(cx).cfg_theme;
+                        mode.theme_change(cx);
+
+                        match win_style::get_hwnd(&w) {
+                            Ok(hwnd) => {
+                                if let Err(e) = win_style::set_always_on_top(hwnd, true) {
+                                    log::warn!("Failed to set always on top: {:?}", e);
+                                };
+                            }
+                            Err(e) => log::warn!("Failed to get HWND: {:?}", e),
                         }
-                    })
-                    .detach();
-
-                    let mode = AppConfig::global(cx).cfg_theme;
-                    mode.theme_change(cx);
-
-                    match win_style::get_hwnd(&w) {
-                        Ok(hwnd) => {
-                            if let Err(e) = win_style::set_always_on_top(hwnd, true) {
-                                log::warn!("Failed to set always on top: {:?}", e);
-                            };
-                        }
-                        Err(e) => log::warn!("Failed to get HWND: {:?}", e),
-                    }
-                });
-                root
-            })
-        }) {
-            log::error!("Faild to open window{:?}", e);
-        };
-    });
+                    });
+                    root
+                })
+            }) {
+                log::error!("Faild to open window{:?}", e);
+            };
+        });
 
     log::info!("Build Application successful");
     Ok(())

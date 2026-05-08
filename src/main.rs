@@ -11,6 +11,7 @@ use windows_core::{HSTRING, w};
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
 // ブラックリスト機能
+// フェードアウト
 
 fn main() -> anyhow::Result<()> {
     unsafe {

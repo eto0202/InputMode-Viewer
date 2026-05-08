@@ -1,12 +1,12 @@
 use gpui::{
-    App, AppContext, BorrowAppContext, Context, Entity, IntoElement, ParentElement, Styled, Task,
+    App, BorrowAppContext, Context, IntoElement, ParentElement, Styled, Task,
     Window,
 };
 use gpui_component::{
     Icon, IconName, IndexPath,
     button::Button,
     h_flex,
-    list::{List, ListDelegate, ListItem, ListState},
+    list::{ListDelegate, ListItem, ListState},
 };
 
 use crate::common::{
@@ -65,7 +65,7 @@ impl ListDelegate for ProcessListDelegate {
         &mut self,
         ix: IndexPath,
         _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let name = self.filtered_items.get(ix.row)?;
         Some(
@@ -81,7 +81,7 @@ impl ListDelegate for ProcessListDelegate {
                                 let name = name.clone();
                                 move |_, _, cx| {
                                     // ここでデータが変わったことを知らせる
-                                    cx.update_global::<AppConfig, _>(|config, cx| {
+                                    cx.update_global::<AppConfig, _>(|config, _| {
                                         if config.process_cfg.mode == PolicyMode::BlackList {
                                             config.process_cfg.blacklist.insert(name.as_str());
                                         } else {
@@ -200,7 +200,7 @@ impl ListDelegate for CfgListDelegate {
         &mut self,
         ix: IndexPath,
         _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let name = self.filtered_items.get(ix.row)?;
         Some(
@@ -215,7 +215,7 @@ impl ListDelegate for CfgListDelegate {
                             .on_click({
                                 let name = name.clone();
                                 move |_, _, cx| {
-                                    cx.update_global::<AppConfig, _>(|config, cx| {
+                                    cx.update_global::<AppConfig, _>(|config, _| {
                                         if config.process_cfg.mode == PolicyMode::BlackList {
                                             config.process_cfg.blacklist.remove(name.as_str());
                                         } else {

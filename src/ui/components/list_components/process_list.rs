@@ -77,7 +77,6 @@ impl ProcessList {
         // 各リストは自分の状態しか知らないため( global_mut で中身を書き換えても他のリストは知らない)、
         // ここで AppConfig の変更を待ち構えて、update_global された場合に各リストのデータを更新する
         cx.observe_global::<AppConfig>(|this, cx| {
-            // 1. 最新のリストを AppConfig から取得する
             let config = AppConfig::global(cx);
             let latest_items: Vec<String> = if config.process_cfg.mode == PolicyMode::BlackList {
                 config.process_cfg.blacklist.processes.clone()
@@ -85,7 +84,7 @@ impl ProcessList {
                 config.process_cfg.whitelist.processes.clone()
             };
 
-            this.process_list.c_state.update(cx, |state, cx| {
+            this.process_list.c_state.update(cx, |state, _| {
                 state.delegate_mut().update_list(latest_items);
             });
 
@@ -105,7 +104,7 @@ impl ProcessList {
         search_input: Entity<InputState>,
         p_state: Entity<ListState<ProcessListDelegate>>,
         c_state: Entity<ListState<CfgListDelegate>>,
-        cx: &mut Context<SettingsWindow>,
+        _: &mut Context<SettingsWindow>,
     ) -> Vec<SettingItem> {
         let p = p_state.clone();
         let c = c_state.clone();
