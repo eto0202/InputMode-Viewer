@@ -137,46 +137,6 @@ impl Controller {
 
     fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
         el.set_control_flow(ControlFlow::Wait);
-        if self.state.displayed {
-            let core = self.core.as_ref().context("AppCore Missing")?;
-            let cfg = core.cfg.read();
-            let mut pt = POINT::default();
-            unsafe { GetCursorPos(&mut pt) }?;
-
-            match cfg.active_role {
-                WindowRole::Floating => {
-                    let o = cfg.floating.offset;
-                    let v_screen = self.state.v_screen;
-                    core.renderer.mouse_tracking(
-                        self.state.floating.x - v_screen.x + o.x,
-                        self.state.floating.y - v_screen.y + o.y,
-                        pt.x - v_screen.x + o.x,
-                        pt.y - v_screen.y + o.y,
-                    )?;
-                    self.state.floating = pt;
-                }
-                WindowRole::Fixed => {
-                    let (info, s) = calc::monitor_info(pt)?;
-                    let pos = calc::fixed_position(
-                        self.state.metrics,
-                        &cfg.fixed.pos,
-                        cfg.fixed.margin,
-                        cfg.fixed.style.padding,
-                        info,
-                        s,
-                    )?;
-                    // DComp の SetOffset はウィンドウの左上を基準とした相対座標で計算
-                    // 画面全体を透明なウィンドウで覆っているため、- 仮想スクリーンのx,y軸
-                    core.renderer.set_position(
-                        (pos.x - self.state.v_screen.x) as f32,
-                        (pos.y - self.state.v_screen.y) as f32,
-                    )?;
-                    self.state.fixed = pos;
-                }
-            }
-            core.mw.window.request_redraw();
-        }
-
         // タスクトレイイベント
         if let Ok(e) = MenuEvent::receiver().try_recv() {
             match e.id.as_ref() {
@@ -187,6 +147,48 @@ impl Controller {
                 _ => {}
             }
         };
+        if !self.state.displayed {
+            return Ok(());
+        }
+
+        let core = self.core.as_ref().context("AppCore Missing")?;
+        let cfg = core.cfg.read();
+        let mut pt = POINT::default();
+        unsafe { GetCursorPos(&mut pt) }?;
+
+        match cfg.active_role {
+            WindowRole::Floating => {
+                let o = cfg.floating.offset;
+                let v_screen = self.state.v_screen;
+                core.renderer.mouse_tracking(
+                    self.state.floating.x - v_screen.x + o.x,
+                    self.state.floating.y - v_screen.y + o.y,
+                    pt.x - v_screen.x + o.x,
+                    pt.y - v_screen.y + o.y,
+                )?;
+                self.state.floating = pt;
+            }
+            WindowRole::Fixed => {
+                let (info, s) = calc::monitor_info(pt)?;
+                let pos = calc::fixed_position(
+                    self.state.metrics,
+                    &cfg.fixed.pos,
+                    cfg.fixed.margin,
+                    cfg.fixed.style.padding,
+                    info,
+                    s,
+                )?;
+                // DComp の SetOffset はウィンドウの左上を基準とした相対座標で計算
+                // 画面全体を透明なウィンドウで覆っているため、- 仮想スクリーンのx,y軸
+                core.renderer.set_position(
+                    (pos.x - self.state.v_screen.x) as f32,
+                    (pos.y - self.state.v_screen.y) as f32,
+                )?;
+                self.state.fixed = pos;
+            }
+        }
+        core.mw.window.request_redraw();
+
         Ok(())
     }
 
@@ -198,7 +200,7 @@ impl Controller {
             Message::Mode(mode) => {
                 // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
                 if self.state.mode != mode {
-                    let core = self.core.as_ref().context("AppCore Missing")?;
+                    let core = self.core.as_mut().context("AppCore Missing")?;
 
                     if let Ok(new_size) =
                         AppCore::try_resize(&core.cfg, &core.renderer, mode, core.mw.role)

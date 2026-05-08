@@ -8,6 +8,9 @@ use windows_core::{HSTRING, w};
 
 // TODO: デバック画面を実装し、未設定のグリフ、ログファイルを表示
 // バックグラウンドプロセスに
+// キャレット座標は管理者権限なら取得できるかも
+// IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
+// ブラックリスト機能
 
 fn main() -> anyhow::Result<()> {
     unsafe {

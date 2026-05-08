@@ -16,7 +16,7 @@ pub use crate::{
         sys::{
             renderer::DCompRenderer,
             uia::{cap::InputCapability, text::InputMode},
-            win32,
+            win_style,
         },
     },
     ui,

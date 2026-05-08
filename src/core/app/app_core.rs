@@ -26,7 +26,7 @@ impl AppCore {
         let mw = MainWindow::new(el, cfg.read().active_role, p_pos, p_size)?;
         log::info!("Create ManagedWindow successful");
 
-        win32::set_window_style(mw.hwnd)?;
+        win_style::set_window_style(mw.hwnd)?;
         log::info!("Set window style successful");
 
         let (renderer, _w, _h) =

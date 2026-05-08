@@ -1,6 +1,6 @@
 use crate::{
     common::app_config::{AppConfig, ConfigTheme},
-    core::sys::win32,
+    core::sys::win_style,
     ui::window,
 };
 use anyhow::Context;
@@ -68,9 +68,9 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                     let mode = AppConfig::global(cx).cfg_theme;
                     mode.theme_change(cx);
 
-                    match win32::get_hwnd(&w) {
+                    match win_style::get_hwnd(&w) {
                         Ok(hwnd) => {
-                            if let Err(e) = win32::set_always_on_top(hwnd, true) {
+                            if let Err(e) = win_style::set_always_on_top(hwnd, true) {
                                 log::warn!("Failed to set always on top: {:?}", e);
                             };
                         }

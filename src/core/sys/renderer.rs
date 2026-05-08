@@ -25,6 +25,7 @@ use windows::{
             },
             Dxgi::{Common::*, *},
         },
+        System::Threading::WaitForSingleObject,
     },
     core::*,
 };
@@ -250,9 +251,11 @@ impl DCompRenderer {
         h: f32,
         p: f32,
     ) -> anyhow::Result<()> {
-        // SwapChainのバッファをD2Dの描き先に設定
-        // 次に書き込むための画用紙（DXGI Surface）を取得
         unsafe {
+            // GPUの準備ができるまで待機
+            WaitForSingleObject(self.waitable_object, 1000);
+            // SwapChainのバッファをD2Dの描き先に設定
+            // 次に書き込むための画用紙（DXGI Surface）を取得
             let dxgi_surface: IDXGISurface = self.swap_chain.GetBuffer(0)?;
 
             let bitmap_props = D2D1_BITMAP_PROPERTIES1 {
@@ -488,16 +491,6 @@ impl DCompRenderer {
             self.dcomp_visual.SetOffsetX2(x)?;
             self.dcomp_visual.SetOffsetY2(y)?;
             self.dcomp_device.Commit()?;
-        }
-        Ok(())
-    }
-
-    pub fn set_visible(&self, visible: bool, x: f32, y: f32) -> anyhow::Result<()> {
-        if visible {
-            self.set_position(x, y)?;
-        } else {
-            // 今までの「画面外へ飛ばす」ロジックをそのまま適用
-            self.set_position(-10000.0, -10000.0)?;
         }
         Ok(())
     }

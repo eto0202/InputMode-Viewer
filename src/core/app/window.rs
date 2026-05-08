@@ -28,7 +28,7 @@ impl MainWindow {
 
         let window = Arc::new(el.create_window(attr)?);
         window.set_cursor_hittest(false)?;
-        let hwnd = win32::get_hwnd(&window)?;
+        let hwnd = win_style::get_hwnd(&window)?;
 
         Ok(Self {
             window,

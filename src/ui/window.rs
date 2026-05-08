@@ -1,6 +1,9 @@
 use crate::{
     common::{app_config::AppConfig, config},
-    ui::components::{fixed::Fixed, floating::Floating, general::appearance},
+    ui::components::{
+        fixed::Fixed, floating::Floating, general::appearance,
+        list_components::process_list::ProcessList,
+    },
 };
 use gpui::*;
 use gpui_component::{
@@ -23,6 +26,7 @@ impl AppConfig {
 pub struct SettingsWindow {
     pub fixed: Fixed,
     pub floating: Floating,
+    pub process_list: ProcessList,
 }
 
 impl SettingsWindow {
@@ -36,6 +40,7 @@ impl SettingsWindow {
         Self {
             fixed: Fixed::new(window, cx),
             floating: Floating::new(window, cx),
+            process_list: ProcessList::new(window, cx),
         }
     }
 }
@@ -61,6 +66,14 @@ impl Render for SettingsWindow {
                             .title("Floating")
                             .items(Floating::floating(&mut self.floating)),
                     ]),
+                SettingPage::new("ProcessManager").groups(vec![SettingGroup::new().items(
+                    ProcessList::render_list(
+                        self.process_list.search_input.clone(),
+                        self.process_list.p_state.clone(),
+                        self.process_list.c_state.clone(),
+                        cx,
+                    ),
+                )]),
             ])
     }
 }

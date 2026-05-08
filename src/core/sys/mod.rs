@@ -1,4 +1,4 @@
 pub mod hooks;
 pub mod renderer;
 pub mod uia;
-pub mod win32;
+pub mod win_style;
