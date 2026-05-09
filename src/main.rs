@@ -21,7 +21,30 @@ fn main() -> anyhow::Result<()> {
     utils::init_logger()?;
     log::info!("Logger initialized successful");
 
-    // パニックが起きた時に、自動的に log::error! に流す設定
+    set_panic_hook();
+    log::info!("Set panic hook successful");
+
+    if let Err(e) = app_run() {
+        let error_msg = format!("{:?}", e);
+        log::error!("Fatal error: {}", error_msg);
+
+        // Windowsのメッセージボックスを表示
+        unsafe {
+            MessageBoxW(
+                None,
+                &HSTRING::from(&error_msg),
+                w!("Application Error"),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+        std::process::exit(1);
+    }
+    log::info!("Main process started successfully");
+    Ok(())
+}
+
+// パニックが起きた時に、自動的に log::error! に流す
+fn set_panic_hook() {
     std::panic::set_hook(Box::new(|panic_info| {
         // パニックメッセージの取得を試みる
         let payload = panic_info.payload();
@@ -42,24 +65,4 @@ fn main() -> anyhow::Result<()> {
         // ログファイルにエラーとして書き込む
         log::error!("PANIC occurred at {}: {}", location, message);
     }));
-
-    log::info!("Set panic hook successful");
-
-    if let Err(e) = app_run() {
-        let error_msg = format!("{:?}", e);
-        log::error!("Fatal error: {}", error_msg);
-
-        // Windowsのメッセージボックスを表示
-        unsafe {
-            MessageBoxW(
-                None,
-                &HSTRING::from(&error_msg),
-                w!("Application Error"),
-                MB_OK | MB_ICONERROR,
-            );
-        }
-        std::process::exit(1);
-    }
-    log::info!("Main process started successfully");
-    Ok(())
 }

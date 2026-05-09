@@ -50,13 +50,13 @@ gpui_platform = {git = "https://github.com/zed-industries/zed",features = ["font
 gpui-component = {git = "https://github.com/longbridge/gpui-component",rev = "2d2524d"}
 gpui-component-assets = {git = "https://github.com/longbridge/gpui-component",rev = "2d2524d"}
 windows-numerics = "0.3.1"
-parking_lot = "0.12.5"
 strum = "0.28.0"
 strum_macros = "0.28.0"
 palette = "0.7.6"
 check_elevation = "0.2.7"
 log = "0.4.29"
 flexi_logger = "0.31.8"
+arc-swap = "1.9.1"
 
 [profile.dev]
 debug = 1

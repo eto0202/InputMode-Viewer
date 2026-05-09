@@ -23,7 +23,6 @@ pub use crate::{
 };
 pub use anyhow::Context;
 pub use notify::{Error, Event, EventKind, Watcher};
-pub use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 pub use std::{
     collections::HashMap,
     sync::Arc,

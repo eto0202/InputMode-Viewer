@@ -1,9 +1,10 @@
+use arc_swap::ArcSwap;
 use winit::dpi::PhysicalPosition;
 
 use crate::core::app::{calc::VirtualScreen, prelude::*};
 
 pub struct AppCore {
-    pub cfg: Arc<RwLock<AppConfig>>,
+    pub cfg: Arc<ArcSwap<AppConfig>>,
     pub tray_icon: TrayIcon,
     pub mw: MainWindow,
     pub renderer: DCompRenderer,
@@ -12,18 +13,18 @@ pub struct AppCore {
 impl AppCore {
     pub fn new(
         el: &ActiveEventLoop,
-        cfg: Arc<RwLock<AppConfig>>,
+        cfg: Arc<ArcSwap<AppConfig>>,
         mode: InputMode,
         v_screen: VirtualScreen,
     ) -> anyhow::Result<Self> {
         log::info!("Create ProxyWindow successful");
 
-        let style = AppCore::get_style(&cfg, cfg.read().active_role)?;
+        let style = AppCore::get_style(&cfg, cfg.load().active_role)?;
 
         let p_pos = PhysicalPosition::new(v_screen.x as f32, v_screen.y as f32);
         let p_size = PhysicalSize::new(v_screen.cx as f32, v_screen.cy as f32);
 
-        let mw = MainWindow::new(el, cfg.read().active_role, p_pos, p_size)?;
+        let mw = MainWindow::new(el, cfg.load().active_role, p_pos, p_size)?;
         log::info!("Create ManagedWindow successful");
 
         win_style::set_window_style(mw.hwnd)?;
@@ -43,7 +44,7 @@ impl AppCore {
 
     // モードが変化した時に、ウィンドウサイズを再計算
     pub fn try_resize(
-        cfg: &Arc<RwLock<AppConfig>>,
+        cfg: &Arc<ArcSwap<AppConfig>>,
         renderer: &DCompRenderer,
         mode: InputMode,
         role: WindowRole,
@@ -62,16 +63,16 @@ impl AppCore {
 
     // スタイルの取得
     pub fn get_style(
-        cfg: &Arc<RwLock<AppConfig>>,
+        cfg: &Arc<ArcSwap<AppConfig>>,
         role: WindowRole,
     ) -> anyhow::Result<WindowStyle> {
         // ロックを取得
-        let lock = cfg.read();
+        let lock = cfg.load();
         // ガードをWindowStyleだけに絞り込む
-        let style = RwLockReadGuard::map(lock, |cfg| match role {
-            WindowRole::Floating => &cfg.floating.style,
-            WindowRole::Fixed => &cfg.fixed.style,
-        });
+        let style = match role {
+            WindowRole::Floating => &lock.floating.style,
+            WindowRole::Fixed => &lock.fixed.style,
+        };
 
         Ok(style.clone())
     }

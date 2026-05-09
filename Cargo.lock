@@ -3422,6 +3422,7 @@ name = "input_mode-viewer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "check_elevation",
  "directories",
  "flexi_logger",
@@ -3433,7 +3434,6 @@ dependencies = [
  "log",
  "notify 8.2.0",
  "palette",
- "parking_lot",
  "rand 0.9.4",
  "raw-window-handle",
  "serde",
