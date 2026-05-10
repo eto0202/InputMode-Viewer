@@ -5,13 +5,10 @@ use windows::Win32::{
     Graphics::Dwm::{
         DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
     },
-    UI::{
-        Controls::MARGINS,
-        
-        WindowsAndMessaging::*,
-    },
+    System::LibraryLoader::GetModuleHandleW,
+    UI::{Controls::MARGINS, WindowsAndMessaging::*},
 };
-use windows_core::BOOL;
+use windows_core::{BOOL, PCWSTR, w};
 
 // ウィンドウの位置指定
 pub fn set_window_position(hwnd: HWND, x: i32, y: i32, cx: i32, cy: i32) -> anyhow::Result<()> {
@@ -41,6 +38,45 @@ pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> anyhow::Result<()> {
     unsafe { SetWindowPos(hwnd, Some(insert_after), 0, 0, 0, 0, uflags) }?;
 
     Ok(())
+}
+
+unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+}
+
+pub fn create_dummy_parent() -> Result<HWND> {
+    unsafe {
+        let instance = GetModuleHandleW(None)?;
+        let class_name = w!("DummyParentClass");
+
+        // ウィンドウクラスの登録
+        let wnd_class = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            lpfnWndProc: Some(wndproc),
+            hInstance: instance.into(),
+            lpszClassName: PCWSTR(class_name.as_ptr()),
+            ..Default::default()
+        };
+
+        RegisterClassExW(&wnd_class);
+
+        let hwnd = CreateWindowExW(
+            WINDOW_EX_STYLE(WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0),
+            class_name,
+            w!(""),
+            WINDOW_STYLE(WS_POPUP.0 | WS_VISIBLE.0),
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(HINSTANCE(instance.0)),
+            None,
+        )?;
+
+        Ok(hwnd)
+    }
 }
 
 pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
@@ -95,7 +131,7 @@ pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
             0,
             0,
             0,
-            SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOREDRAW,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOREDRAW | SWP_FRAMECHANGED,
         )
     }?;
 

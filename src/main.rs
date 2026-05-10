@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![windows_subsystem = "windows"]
 use input_mode_viewer::{core::utils, run::app_run};
 use windows::Win32::UI::{
     HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
@@ -11,9 +11,10 @@ use windows_core::{HSTRING, w};
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
 // フェードアウト
-// Compactモード字に余白が大きすぎる問題と画面からはみ出る問題
+// Compactモード時に余白が大きすぎる問題と画面からはみ出る問題
 // 表示時にタスクバーの反応が悪い？
 // リスト更新ボタン
+// 追従精度のユーザー設定
 
 fn main() -> anyhow::Result<()> {
     unsafe {

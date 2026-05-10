@@ -1,4 +1,4 @@
-use crate::core::app::prelude::*;
+use crate::core::{app::prelude::*, sys::win_style::create_dummy_parent};
 
 pub struct MainWindow {
     pub window: Arc<Window>,
@@ -14,7 +14,11 @@ impl MainWindow {
         p_pos: PhysicalPosition<f32>,
         p_size: PhysicalSize<f32>,
     ) -> anyhow::Result<Self> {
+        let parent_hwnd = create_dummy_parent()?;
+
         let attr = WindowAttributes::default()
+            .with_owner_window(parent_hwnd.0 as isize)
+            .with_title("input_mode_viewer")
             .with_decorations(false)
             .with_transparent(true)
             .with_visible(false)
