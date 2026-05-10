@@ -1,9 +1,4 @@
-use tray_icon::{
-    TrayIcon, TrayIconBuilder,
-    menu::{Menu, MenuItem},
-};
-
-use crate::core::utils;
+use crate::core::app::prelude::*;
 
 pub const ID_QUIT: &str = "Quit";
 pub const ID_SETTING: &str = "Setting";

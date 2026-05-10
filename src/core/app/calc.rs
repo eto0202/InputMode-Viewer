@@ -1,11 +1,3 @@
-use windows::Win32::{
-    Graphics::DirectWrite::DWRITE_TEXT_METRICS,
-    UI::WindowsAndMessaging::{
-        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-        SM_YVIRTUALSCREEN,
-    },
-};
-
 use crate::{common::app_config::WindowPos, core::app::prelude::*};
 
 // 座標計算

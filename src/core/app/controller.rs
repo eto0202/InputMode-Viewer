@@ -1,14 +1,4 @@
-use arc_swap::{ArcSwap, Guard};
-use windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_METRICS;
-use winit::event_loop::ControlFlow;
-
-use crate::{
-    core::{
-        app::{calc::VirtualScreen, prelude::*},
-        utils,
-    },
-    run,
-};
+use crate::{common::app_config::PolicyMode, core::app::prelude::*};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -37,8 +27,8 @@ impl Default for Controller {
     fn default() -> Self {
         Self {
             state: AppState {
-                cap: InputCapability::Unknown,
-                mode: InputMode::Unknown,
+                cap: InputCapability::default(),
+                mode: InputMode::default(),
                 displayed: false,
                 v_screen: VirtualScreen::default(),
                 floating: POINT::default(),
@@ -137,8 +127,8 @@ impl Controller {
 
         match cfg.active_role {
             WindowRole::Floating => {
-                let pt = set_pos_floating(core, cfg, &self.state, pt)?;
-                self.state.floating = pt;
+                set_pos_floating(core, cfg, &self.state, pt)?;
+                self.state.floating = pt; // 現在のマウス座標を保存
             }
             WindowRole::Fixed => {
                 let pos = set_pos_fixed(core, cfg, &self.state, pt)?;
@@ -162,7 +152,7 @@ impl Controller {
                     resize_request(mode, core)?;
                 }
                 self.state.mode = mode;
-                self.state.displayed = display_check(&self.state)?;
+                self.state.displayed = check_displayed(&self.state, core)?;
             }
             Message::ConfigUpdated => {
                 let core = self.core.as_mut().context("AppCore Missing")?;
@@ -174,13 +164,38 @@ impl Controller {
     }
 }
 
-fn display_check(state: &AppState) -> anyhow::Result<bool> {
+fn check_displayed(state: &AppState, core: &AppCore) -> anyhow::Result<bool> {
+    let cfg = core.cfg.load().process_cfg.clone();
+
     let displayed = match state.cap {
         InputCapability::No => false,
         InputCapability::Yes => state.mode != InputMode::Unknown,
         InputCapability::Unknown => state.mode.is_on(), // 不明の場合はONの時だけ表示
     };
-    Ok(displayed)
+
+    // 失敗した場合は表示する
+    let result = match cfg.mode {
+        PolicyMode::BlackList => {
+            if !utils::included_in_running_process(&utils::vec_to_set(cfg.blacklist.processes))
+                .unwrap_or(false)
+            {
+                displayed
+            } else {
+                false
+            }
+        }
+        PolicyMode::WhiteList => {
+            if utils::included_in_running_process(&utils::vec_to_set(cfg.whitelist.processes))
+                .unwrap_or(true)
+            {
+                displayed
+            } else {
+                false
+            }
+        }
+    };
+
+    Ok(result)
 }
 
 // ウィンドウサイズを再計算してリサイズ要求
@@ -282,7 +297,7 @@ fn set_pos_floating(
     cfg: Guard<Arc<AppConfig>>,
     state: &AppState,
     pt: POINT,
-) -> anyhow::Result<POINT> {
+) -> anyhow::Result<()> {
     let o = cfg.floating.offset;
     let v_screen = state.v_screen;
 
@@ -292,7 +307,7 @@ fn set_pos_floating(
         pt.x - v_screen.x + o.x,
         pt.y - v_screen.y + o.y,
     )?;
-    Ok(pt)
+    Ok(())
 }
 
 fn set_pos_fixed(

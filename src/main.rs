@@ -10,8 +10,10 @@ use windows_core::{HSTRING, w};
 // バックグラウンドプロセスに
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
-// ブラックリスト機能
 // フェードアウト
+// Compactモード字に余白が大きすぎる問題と画面からはみ出る問題
+// 表示時にタスクバーの反応が悪い？
+// リスト更新ボタン
 
 fn main() -> anyhow::Result<()> {
     unsafe {

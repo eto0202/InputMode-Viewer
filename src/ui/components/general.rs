@@ -20,7 +20,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                 },
             ),
         )
-        .description("If this doesn't work in some apps, please enable it"),
+        .description("If this doesn't work in some apps, please enable it.\nNote: If this setting is changed, the system will automatically restart."),
         SettingItem::new(
             "Start Up",
             SettingField::checkbox(
@@ -31,7 +31,7 @@ pub fn appearance(_: &mut Window, _: &mut Context<SettingsWindow>) -> Vec<Settin
                 },
             ),
         )
-        .description("Run automatically when the PC starts up"),
+        .description("Run automatically when the PC starts up. Based on current permissions.\nAdministrator: HIGHEST, Standard User: LUA\nNote: If this setting is changed, the system will automatically restart."),
         SettingItem::new(
             "Theme Mode",
             SettingField::dropdown(

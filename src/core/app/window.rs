@@ -1,5 +1,3 @@
-use winit::dpi::PhysicalPosition;
-
 use crate::core::app::prelude::*;
 
 pub struct MainWindow {

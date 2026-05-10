@@ -28,7 +28,8 @@ pub struct ProcessList {
 
 impl ProcessList {
     pub fn new(window: &mut Window, cx: &mut Context<SettingsWindow>) -> Self {
-        let p_delegate = ProcessListDelegate::new(utils::get_running_process_names());
+        let vec = utils::get_running_process_names().unwrap_or_default();
+        let p_delegate = ProcessListDelegate::new(vec);
 
         let items = if AppConfig::global(cx).process_cfg.mode == PolicyMode::BlackList {
             AppConfig::global(cx)
