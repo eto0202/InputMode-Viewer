@@ -223,7 +223,7 @@ impl Floating {
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
-                .default_value(AppConfig::default().floating.frequency as f64),
+                .default_value(((AppConfig::default().floating.frequency * 100.0).round() / 100.0) as f64),
             )
             .description("Mouse tracking frequency:\nMin 0.01, Max 0.1, Default 0.05\nThe lower the value, the smoother the tracking."),
         ]
