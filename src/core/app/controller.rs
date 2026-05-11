@@ -299,6 +299,7 @@ fn set_pos_floating(
     pt: POINT,
 ) -> anyhow::Result<()> {
     let o = cfg.floating.offset;
+    let f = cfg.floating.frequency;
     let v_screen = state.v_screen;
 
     core.renderer.mouse_tracking(
@@ -306,6 +307,7 @@ fn set_pos_floating(
         state.floating.y - v_screen.y + o.y,
         pt.x - v_screen.x + o.x,
         pt.y - v_screen.y + o.y,
+        f,
     )?;
     Ok(())
 }
@@ -339,6 +341,11 @@ fn wait_tray_event(el: &ActiveEventLoop) {
     if let Ok(e) = MenuEvent::receiver().try_recv() {
         match e.id.as_ref() {
             tray::ID_QUIT => el.exit(),
+            tray::ID_RESTART => {
+                // 権限降格は行わずそのまま再起動
+                // もし管理者権限に変更があった場合、再起動時に昇格/降格処理が行われる
+                utils::restart_application(false);
+            }
             tray::ID_SETTING => {
                 let _ = ui::spawn::spawn_settings_ui();
             }

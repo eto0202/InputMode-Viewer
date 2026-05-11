@@ -1,7 +1,7 @@
 use crate::{
     common::{app_config::AppConfig, config},
     ui::components::{
-        fixed::Fixed, floating::Floating, general::appearance,
+        fixed::Fixed, floating::Floating, general::general,
         list_components::process_list::ProcessList,
     },
 };
@@ -58,7 +58,7 @@ impl Render for SettingsWindow {
                         // グループ（メイン領域のセクション）
                         SettingGroup::new()
                             .title("General")
-                            .items(appearance(window, cx)),
+                            .items(general(window, cx)),
                         SettingGroup::new()
                             .title("Fixed")
                             .items(Fixed::fixed(&mut self.fixed)),

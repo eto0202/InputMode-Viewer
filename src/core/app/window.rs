@@ -14,8 +14,9 @@ impl MainWindow {
         p_pos: PhysicalPosition<f32>,
         p_size: PhysicalSize<f32>,
     ) -> anyhow::Result<Self> {
+        // バックグラウンドプロセスにするため
+        // ダミーウィンドウを作成し with_owner_window を設定
         let parent_hwnd = create_dummy_parent()?;
-
         let attr = WindowAttributes::default()
             .with_owner_window(parent_hwnd.0 as isize)
             .with_title("input_mode_viewer")

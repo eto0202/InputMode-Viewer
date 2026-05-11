@@ -60,6 +60,7 @@ pub fn create_dummy_parent() -> Result<HWND> {
 
         RegisterClassExW(&wnd_class);
 
+        // バックグラウンドプロセスにするためにはWS_VISIBLEが必要っぽい
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE(WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0),
             class_name,

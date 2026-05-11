@@ -2,14 +2,18 @@ use crate::core::app::prelude::*;
 
 pub const ID_QUIT: &str = "Quit";
 pub const ID_SETTING: &str = "Setting";
+pub const ID_RESTART: &str = "Restart";
 
 pub fn tray_icon() -> anyhow::Result<TrayIcon> {
     let menu = Menu::new();
 
     let settings = MenuItem::with_id(ID_SETTING, "Setting", true, None);
+    let restart = MenuItem::with_id(ID_RESTART, "Restart", true, None);
     let quit = MenuItem::with_id(ID_QUIT, "Quit", true, None);
 
+
     menu.append(&settings)?;
+    menu.append(&restart)?;
     menu.append(&quit)?;
 
     // コンパイル時に画像をバイナリに取り込む

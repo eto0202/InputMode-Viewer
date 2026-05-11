@@ -7,14 +7,14 @@ use windows::Win32::UI::{
 use windows_core::{HSTRING, w};
 
 // TODO: デバック画面を実装し、未設定のグリフ、ログファイルを表示
-// バックグラウンドプロセスに
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
 // フェードアウト
 // Compactモード時に余白が大きすぎる問題と画面からはみ出る問題
 // 表示時にタスクバーの反応が悪い？
-// リスト更新ボタン
 // 追従精度のユーザー設定
+// 最前面に不具合
+// 表示モード（常時、入力機能、自動非表示）
 
 fn main() -> anyhow::Result<()> {
     unsafe {

@@ -72,10 +72,11 @@ impl Fixed {
                         min: 0.0,
                         max: 100.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).fixed.style.font_size.into(),
                     |val: f64, cx: &mut App| {
-                        let size = if val < 5.0 { 5.0 } else { val };
+                        let size = val.clamp(5.0, 5.0);
                         AppConfig::global_mut(cx).fixed.style.font_size = size as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -137,10 +138,11 @@ impl Fixed {
                         min: 0.0,
                         max: 100.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).fixed.style.padding.into(),
                     |val: f64, cx: &mut App| {
-                        let p = if val < 0.0 { 0.0 } else { val };
+                        let p = val.clamp(0.0, 0.0);
                         AppConfig::global_mut(cx).fixed.style.padding = p as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -154,11 +156,12 @@ impl Fixed {
                     NumberFieldOptions {
                         min: 0.0,
                         max: 100.0,
+                        precision: None,
                         step: 1.0,
                     },
                     |cx: &App| (AppConfig::global(cx).fixed.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
-                        let o = if val < 1.0 { 1.0 } else { val };
+                        let o = val.clamp(1.0, 1.0);
                         AppConfig::global_mut(cx).fixed.style.opacity = (o / 100.0) as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -197,10 +200,11 @@ impl Fixed {
                         min: 0.0,
                         max: 500.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| (AppConfig::global(cx).fixed.margin) as f64,
                     |val: f64, cx: &mut App| {
-                        let m = if val < 0.0 { 0.0 } else { val };
+                        let m = val.clamp(0.0, 0.0);
                         AppConfig::global_mut(cx).fixed.margin = m as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },

@@ -72,10 +72,11 @@ impl Floating {
                         min: 0.0,
                         max: 100.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).floating.style.font_size.into(),
                     |val: f64, cx: &mut App| {
-                        let size = if val < 5.0 { 5.0 } else { val };
+                        let size = val.clamp(5.0, 5.0);
                         AppConfig::global_mut(cx).floating.style.font_size = size as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -126,7 +127,7 @@ impl Floating {
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
                     self.bg_color.clone(),
-                    self.font_selected_color,
+                    self.bg_selected_color,
                 )),
             )
             .description("Background Color: Default #333333"),
@@ -137,10 +138,11 @@ impl Floating {
                         min: 0.0,
                         max: 100.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).floating.style.padding.into(),
                     |val: f64, cx: &mut App| {
-                        let p = if val < 0.0 { 0.0 } else { val };
+                        let p = val.clamp(0.0, 0.0);
                         AppConfig::global_mut(cx).floating.style.padding = p as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -155,10 +157,11 @@ impl Floating {
                         min: 0.0,
                         max: 100.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| (AppConfig::global(cx).floating.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
-                        let o = if val < 1.0 { 1.0 } else { val };
+                        let o = val.clamp(1.0, 1.0);
                         AppConfig::global_mut(cx).floating.style.opacity = (o / 100.0) as f32;
 
                         let _ = config::save_config(AppConfig::global(cx));
@@ -174,10 +177,11 @@ impl Floating {
                         min: -50.0,
                         max: 50.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).floating.offset.x.into(),
                     |val: f64, cx: &mut App| {
-                        let x = if val < -50.0 { -50.0 } else { val };
+                        let x = val.clamp(-50.0, -50.0);
                         AppConfig::global_mut(cx).floating.offset.x = x as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -192,10 +196,11 @@ impl Floating {
                         min: -50.0,
                         max: 50.0,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).floating.offset.y.into(),
                     |val: f64, cx: &mut App| {
-                        let y = if val < -50.0 { -50.0 } else { val };
+                        let y = val.clamp(-50.0, -50.0);
                         AppConfig::global_mut(cx).floating.offset.y = y as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -203,6 +208,24 @@ impl Floating {
                 .default_value(AppConfig::default().floating.offset.y),
             )
             .description("Distance from the mouse Y:\nMin -50, Max 50, Default 20"),
+            SettingItem::new(
+                "Tracking Frequency",
+                SettingField::number_input(
+                        NumberFieldOptions {
+                            min: 0.01,
+                            max: 0.1,
+                            step: 0.01,
+                            precision: Some(2),
+                        },
+                    |cx: &App| AppConfig::global(cx).floating.frequency as f64,
+                    |val: f64, cx: &mut App| {
+                        AppConfig::global_mut(cx).floating.frequency = val as f32;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().floating.frequency as f64),
+            )
+            .description("Mouse tracking frequency:\nMin 0.01, Max 0.1, Default 0.05\nThe lower the value, the smoother the tracking."),
         ]
     }
 }

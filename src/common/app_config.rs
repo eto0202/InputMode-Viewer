@@ -23,6 +23,7 @@ pub struct FloatingWindow {
     pub role: WindowRole,
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
+    pub frequency: f32,
     pub style: WindowStyle,
 }
 
@@ -31,6 +32,7 @@ impl Default for FloatingWindow {
         Self {
             role: WindowRole::Floating,
             offset: POINT { x: 20, y: 20 },
+            frequency: 0.05,
             style: WindowStyle::default(),
         }
     }

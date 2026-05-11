@@ -378,8 +378,8 @@ impl DCompRenderer {
     }
 
     // マウス追従
-    pub fn mouse_tracking(&self, cx: i32, cy: i32, tx: i32, ty: i32) -> anyhow::Result<()> {
-        let duration = 0.05f32;
+    pub fn mouse_tracking(&self, cx: i32, cy: i32, tx: i32, ty: i32, f: f32) -> anyhow::Result<()> {
+        let duration = f;
         let anim_x = unsafe { self.dcomp_device.CreateAnimation() }?;
         let velocity_x = (tx - cx) as f32 / duration;
 

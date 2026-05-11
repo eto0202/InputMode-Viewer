@@ -9,7 +9,9 @@ use crate::{
 use gpui::*;
 use gpui::{Entity, SharedString};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, h_flex,
+    ActiveTheme, Icon, IconName, Sizable,
+    button::{Button},
+    h_flex,
     input::{Input, InputEvent, InputState},
     list::{List, ListState},
     resizable::{h_resizable, resizable_panel},
@@ -78,12 +80,18 @@ impl ProcessList {
         // 各リストは自分の状態しか知らないため( global_mut で中身を書き換えても他のリストは知らない)、
         // ここで AppConfig の変更を待ち構えて、update_global された場合に各リストのデータを更新する
         cx.observe_global::<AppConfig>(|this, cx| {
+            let new_items = utils::get_running_process_names().unwrap_or_default();
+
             let config = AppConfig::global(cx);
             let latest_items: Vec<String> = if config.process_cfg.mode == PolicyMode::BlackList {
                 config.process_cfg.blacklist.processes.clone()
             } else {
                 config.process_cfg.whitelist.processes.clone()
             };
+
+            this.process_list.p_state.update(cx, |state, _| {
+                state.delegate_mut().update_list(new_items);
+            });
 
             this.process_list.c_state.update(cx, |state, _| {
                 state.delegate_mut().update_list(latest_items);
@@ -153,11 +161,24 @@ impl ProcessList {
                     .child(
                         v_flex()
                             .size_full()
-                            .gap_4()
+                            .gap_2()
                             .child(
-                                Input::new(&search_input)
-                                    .cleanable(true)
-                                    .prefix(Icon::new(IconName::Search).small()),
+                                h_flex()
+                                    .size_full()
+                                    .gap_2()
+                                    .child(
+                                        Input::new(&search_input)
+                                            .cleanable(true)
+                                            .prefix(Icon::new(IconName::Search).small()),
+                                    )
+                                    .child(
+                                        Button::new("update")
+                                            .icon(IconName::LoaderCircle)
+                                            // 実行中プロセスリストを更新するために通知だけ行う
+                                            .on_click(|_, _, cx| {
+                                                cx.update_global::<AppConfig, _>(|_, _| {});
+                                            }),
+                                    ),
                             )
                             .child(
                                 div()
@@ -171,13 +192,17 @@ impl ProcessList {
                                                 resizable_panel()
                                                     .size(px(300.))
                                                     .size_range(px(150.)..px(800.))
-                                                    .child(List::new(&c_state)),
+                                                    .child(
+                                                        List::new(&c_state).scrollbar_visible(true),
+                                                    ),
                                             )
                                             .child(
                                                 resizable_panel()
                                                     .size(px(300.))
                                                     .size_range(px(150.)..px(800.))
-                                                    .child(List::new(&p_state)),
+                                                    .child(
+                                                        List::new(&p_state).scrollbar_visible(true),
+                                                    ),
                                             ),
                                     ),
                             ),
