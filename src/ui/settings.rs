@@ -66,7 +66,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                             }
                         })
                         .detach();
-                        
+
                         let mode = AppConfig::global(cx).cfg_theme;
                         mode.theme_change(cx);
 

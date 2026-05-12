@@ -8,9 +8,9 @@ use crate::{
     ui::settings,
 };
 
+use anyhow::Context;
 use std::path::PathBuf;
 use std::{env, process};
-use anyhow::Context;
 use windows::Win32::{
     Foundation::{VARIANT_FALSE, VARIANT_TRUE},
     System::{

@@ -1,5 +1,3 @@
-
-
 use gpui::App;
 use gpui_component::{Theme, ThemeMode};
 use palette::{FromColor, Srgba};

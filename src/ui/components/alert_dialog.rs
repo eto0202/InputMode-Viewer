@@ -1,89 +1,97 @@
-use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    ParentElement, Render, Styled, Window, div,
-};
+use gpui::{App, IntoElement, ParentElement, Styled, WeakEntity};
 
 use gpui_component::{
-    ActiveTheme,WindowExt as _,
-    button::{Button,ButtonVariants},
+    ActiveTheme,
+    button::{Button, ButtonVariants},
     dialog::{
-        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter,
-        DialogHeader, DialogTitle,
+        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
     },
-    v_flex,
 };
 
-pub struct RestartAlertDialog {
-    focus_handle: FocusHandle,
-}
+use crate::{
+    common::{app_config::AppConfig, config},
+    ui::window::SettingsWindow,
+};
 
-impl RestartAlertDialog {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
-    }
+pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) -> impl IntoElement {
+    let close = entity.clone();
+    let action = entity.clone();
+    let on_ok = entity.clone();
+    let on_cancel = entity.clone();
 
-    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
+    AlertDialog::new(cx)
+        .on_cancel(move |_, _, cx| {
+            if let Some(e) = on_cancel.upgrade() {
+                let _ = e.update(cx, |this, cx| {
+                    this.is_restart = false;
+                    this.is_later = false;
+                    cx.notify();
+                });
+            }
+            true
+        })
+        .on_ok(move |_, _, cx| {
+            if let Some(e) = on_ok.upgrade() {
+                let _ = e.update(cx, |this, cx| {
+                    this.is_restart = false;
+                    this.is_later = false;
+                    cx.notify();
+                });
+            }
+            true
+        })
+        .content(move |content, _, cx| {
+            let close = close.clone();
+            let action = action.clone();
 
-impl Render for RestartAlertDialog {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("restart-alert-dialog")
-            .track_focus(&self.focus_handle)
-            .size_full()
+            content
             .child(
-                v_flex().gap_6().child(
-                    div().child(
-                        AlertDialog::new(cx)
-                            .trigger(
-                                Button::new("restart")
-                                    .outline()
-                                    .label("Restart Application"),
-                            )
-                            .on_cancel(|_, window, cx| {
-                                window.push_notification("Restart postponed", cx);
-                                true
-                            })
-                            .on_ok(|_, window, cx| {
-                                window.push_notification("Restarting now...", cx);
-                                true
-                            })
-                            .content(|content, _, cx| {
-                                content
-                                    .child(
-                                        DialogHeader::new()
-                                            .child(DialogTitle::new().child("Restart Application"))
-                                            .child(DialogDescription::new().child(
-                                                "Important settings have been changed.\nPlease restart the application to apply the changes.",
-                                            )),
-                                    )
-                                    .child(
-                                        DialogFooter::new()
-                                            .bg(cx.theme().muted)
-                                            .child(
-                                                DialogClose::new().child(
-                                                    Button::new("later")
-                                                        .flex_1()
-                                                        .outline()
-                                                        .label("Later"),
-                                                ),
-                                            )
-                                            .child(
-                                                DialogAction::new().child(
-                                                    Button::new("restart-now")
-                                                        .flex_1()
-                                                        .primary()
-                                                        .label("Restart Now"),
-                                                ),
-                                            ),
-                                    )
-                            }),
-                    ),
-                ),
+                DialogHeader::new()
+                    .child(DialogTitle::new().child("Restart Application"))
+                    .child(DialogDescription::new().child(
+                        "Important settings have been changed.\nPlease restart the application to apply the changes.",
+                    )),
             )
-    }
+            .child(
+                DialogFooter::new()
+                    .child(
+                        DialogClose::new().child(
+                            Button::new("later")
+                                .flex_1()
+                                .outline()
+                                .label("Later")
+                                .bg(cx.theme().muted)
+                                .on_click(move |_, _, cx| {
+                                    if let Some(e) = close.upgrade() {
+                                        let _ = e.update(cx, |this, cx| {
+                                            this.is_restart = false;
+                                            this.is_later = true;
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        ),
+                    )
+                    .child(
+                        DialogAction::new().child(
+                            Button::new("restart-now")
+                                .flex_1()
+                                .primary()
+                                .label("Restart Now")
+                                .on_click(move |_, _, cx| {
+                                    if let Some(e) = action.upgrade() {
+                                        let _ = e.update(cx, |this, cx| {
+                                            this.is_restart = false;
+                                            this.is_later = false;
+                                            cx.notify();
+                                            let _ = config::save_config(AppConfig::global(cx));
+                                        });
+                                    }
+
+                                }),
+                        ),
+                    ),
+            )
+    })
 }

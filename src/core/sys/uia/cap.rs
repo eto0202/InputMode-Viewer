@@ -12,7 +12,10 @@ use anyhow::Context;
 use std::sync::mpsc;
 use std::thread;
 use windows::{
-    Win32::{System::Com::{COINIT_MULTITHREADED}, UI::{Accessibility::*, Input::Ime::*, WindowsAndMessaging::*}},
+    Win32::{
+        System::Com::COINIT_MULTITHREADED,
+        UI::{Accessibility::*, Input::Ime::*, WindowsAndMessaging::*},
+    },
     core::Interface,
 };
 use winit::event_loop::EventLoopProxy;

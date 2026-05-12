@@ -1,4 +1,3 @@
-
 // 「隠す」「フェードイン中」「表示中」の3つの状態で管理し、アニメーションを実装
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ShowState {

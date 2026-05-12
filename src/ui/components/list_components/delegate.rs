@@ -1,7 +1,4 @@
-use gpui::{
-    App, BorrowAppContext, Context, IntoElement, ParentElement, Styled, Task,
-    Window,
-};
+use gpui::{App, BorrowAppContext, Context, IntoElement, ParentElement, Styled, Task, Window};
 use gpui_component::{
     Icon, IconName, IndexPath,
     button::Button,

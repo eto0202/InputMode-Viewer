@@ -11,7 +11,6 @@ pub fn tray_icon() -> anyhow::Result<TrayIcon> {
     let restart = MenuItem::with_id(ID_RESTART, "Restart", true, None);
     let quit = MenuItem::with_id(ID_QUIT, "Quit", true, None);
 
-
     menu.append(&settings)?;
     menu.append(&restart)?;
     menu.append(&quit)?;

@@ -10,7 +10,7 @@ use gpui::*;
 use gpui::{Entity, SharedString};
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable,
-    button::{Button},
+    button::Button,
     h_flex,
     input::{Input, InputEvent, InputState},
     list::{List, ListState},

@@ -1,5 +1,5 @@
 use crate::{
-    common::{ config},
+    common::config,
     core::{
         app::{
             controller::{self},
