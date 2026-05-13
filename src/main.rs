@@ -12,9 +12,10 @@ use windows_core::{HSTRING, w};
 // フェードアウト
 // Compactモード時に余白が大きすぎる問題と画面からはみ出る問題
 // 表示時にタスクバーの反応が悪い？
-// 追従精度のユーザー設定
 // 最前面に不具合
 // 表示モード（常時、入力機能、自動非表示）
+// TODO: モニターサイズからトレイメニュー付近を指定
+// TODO: 最終位置を記憶
 
 fn main() -> anyhow::Result<()> {
     unsafe {
@@ -31,7 +32,6 @@ fn main() -> anyhow::Result<()> {
         let error_msg = format!("{:?}", e);
         log::error!("Fatal error: {}", error_msg);
 
-        // Windowsのメッセージボックスを表示
         unsafe {
             MessageBoxW(
                 None,

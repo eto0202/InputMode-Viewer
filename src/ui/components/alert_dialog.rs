@@ -23,7 +23,7 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
     AlertDialog::new(cx)
         .on_cancel(move |_, _, cx| {
             if let Some(e) = on_cancel.upgrade() {
-                let _ = e.update(cx, |this, cx| {
+                e.update(cx, |this, cx| {
                     this.is_restart = false;
                     this.is_later = false;
                     cx.notify();
@@ -33,7 +33,7 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
         })
         .on_ok(move |_, _, cx| {
             if let Some(e) = on_ok.upgrade() {
-                let _ = e.update(cx, |this, cx| {
+                e.update(cx, |this, cx| {
                     this.is_restart = false;
                     this.is_later = false;
                     cx.notify();
@@ -64,8 +64,7 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
                                 .bg(cx.theme().muted)
                                 .on_click(move |_, _, cx| {
                                     if let Some(e) = close.upgrade() {
-                                        let _ = e.update(cx, |this, cx| {
-                                            this.is_restart = false;
+                                        e.update(cx, |this, cx| {
                                             this.is_later = true;
                                             cx.notify();
                                         });
@@ -81,10 +80,11 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
                                 .label("Restart Now")
                                 .on_click(move |_, _, cx| {
                                     if let Some(e) = action.upgrade() {
-                                        let _ = e.update(cx, |this, cx| {
-                                            this.is_restart = false;
-                                            this.is_later = false;
+                                        e.update(cx, |this, cx| {
                                             cx.notify();
+                                            AppConfig::global_mut(cx).administrator = this.cur_admin;
+                                            AppConfig::global_mut(cx).startup = this.cur_start;
+
                                             let _ = config::save_config(AppConfig::global(cx));
                                         });
                                     }

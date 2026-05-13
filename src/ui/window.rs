@@ -30,6 +30,8 @@ pub struct SettingsWindow {
     pub process_list: ProcessList,
     pub is_restart: bool,
     pub is_later: bool,
+    pub cur_admin: bool,
+    pub cur_start: bool,
 }
 
 impl SettingsWindow {
@@ -46,6 +48,8 @@ impl SettingsWindow {
             process_list: ProcessList::new(window, cx),
             is_restart: false,
             is_later: false,
+            cur_admin: AppConfig::global(cx).administrator,
+            cur_start: AppConfig::global(cx).startup,
         }
     }
 }
@@ -53,6 +57,8 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity().downgrade();
+        let cur_admin = self.cur_admin;
+        let cur_start = self.cur_start;
 
         div()
             .size_full()
@@ -69,7 +75,7 @@ impl Render for SettingsWindow {
                                     // グループ（メイン領域のセクション）
                                     SettingGroup::new()
                                         .title("General")
-                                        .items(general(window, cx)),
+                                        .items(general(window, cx, self.cur_admin, self.cur_start)),
                                     SettingGroup::new()
                                         .title("Fixed")
                                         .items(Fixed::fixed(&mut self.fixed)),
@@ -101,7 +107,12 @@ impl Render for SettingsWindow {
                         Button::new("sidebar-restart")
                             .label("Restart Now")
                             .primary()
-                            .on_click(|_, _, _| {}),
+                            .on_click(move |_, _, cx| {
+                                AppConfig::global_mut(cx).administrator = cur_admin;
+                                AppConfig::global_mut(cx).startup = cur_start;
+
+                                let _ = config::save_config(AppConfig::global(cx));
+                            }),
                     )
                 } else {
                     div().size_0().invisible()

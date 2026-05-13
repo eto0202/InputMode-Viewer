@@ -8,38 +8,44 @@ use crate::{
 use gpui::{App, Context, SharedString, *};
 use gpui_component::setting::{SettingField, SettingItem};
 
-pub fn general(_: &mut Window, cx: &mut Context<SettingsWindow>) -> Vec<SettingItem> {
+pub fn general(
+    _: &mut Window,
+    cx: &mut Context<SettingsWindow>,
+    cur_admin: bool,
+    cur_start: bool,
+) -> Vec<SettingItem> {
     let entity1 = cx.entity().downgrade();
     let entity2 = cx.entity().downgrade();
     vec![
             SettingItem::new(
                 "Run as Administrator",
                 SettingField::checkbox(
-                    |cx: &App| AppConfig::global(cx).administrator,
+                    move |_: &App| cur_admin,
                     move |val: bool, cx: &mut App| {
-                        AppConfig::global_mut(cx).administrator = val;
                         let _ = entity1.update(cx, |this, cx| {
                             this.is_restart = true;
+                            this.cur_admin = val;
                             cx.notify();
                         });
                         // let _ = config::save_config(AppConfig::global(cx));
                     },
-                ),
+                ).default_value(AppConfig::default().administrator),
             )
             .description("If this doesn't work in some apps, please enable it."),
             SettingItem::new(
                 "Start Up",
                 SettingField::checkbox(
-                    |cx: &App| AppConfig::global(cx).startup,
+                    move |_: &App| cur_start,
                     move |val: bool, cx: &mut App| {
-                        AppConfig::global_mut(cx).startup = val;
                         let _ = entity2.update(cx, |this, cx| {
                             this.is_restart = true;
+                            this.cur_start = val;
+                            
                             cx.notify();
                         });
                         // let _ = config::save_config(AppConfig::global(cx));
                     },
-                ),
+                ).default_value(AppConfig::default().startup),
             )
             .description("Run automatically when the PC starts up. Based on current permissions.\nAdministrator: HIGHEST, Standard User: LUA"),
             SettingItem::new(

@@ -35,9 +35,6 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     let options = WindowOptions {
         focus: true,
         window_bounds: Some(WindowBounds::Windowed(Bounds {
-            // ウィンドウ位置
-            // TODO: モニターサイズからトレイメニュー付近を指定
-            // TODO: 最終位置を記憶
             origin: Point::new(px(550.0), px(250.0)),
             size: size(px(1000.0), px(700.0)),
         })),
