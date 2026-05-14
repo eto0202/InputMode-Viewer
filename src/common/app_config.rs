@@ -23,15 +23,19 @@ pub struct FloatingWindow {
     pub offset: POINT, // マウスからどれくらい離すか
     pub frequency: f32,
     pub style: WindowStyle,
+    pub display_style: DisplayStyle,
+    pub auto_hide: AutoHide,
 }
 
 impl Default for FloatingWindow {
     fn default() -> Self {
         Self {
-            role: WindowRole::Floating,
+            role: WindowRole::default(),
             offset: POINT { x: 20, y: 20 },
             frequency: 0.05,
             style: WindowStyle::default(),
+            display_style: DisplayStyle::default(),
+            auto_hide: AutoHide::default(),
         }
     }
 }
@@ -42,16 +46,39 @@ pub struct FixedWindow {
     pub pos: WindowPos, // 表示位置
     pub margin: i32,
     pub style: WindowStyle, // ウィンドウスタイル
+    pub display_style: DisplayStyle,
+    pub auto_hide: AutoHide,
 }
 
 impl Default for FixedWindow {
     fn default() -> Self {
         Self {
-            role: WindowRole::Fixed,
-            pos: WindowPos::Top,
+            role: WindowRole::default(),
+            pos: WindowPos::default(),
             margin: 20,
             style: WindowStyle::default(),
+            display_style: DisplayStyle::default(),
+            auto_hide: AutoHide::default(),
         }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
+pub enum DisplayStyle {
+    Always,
+    #[default]
+    Smart,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AutoHide {
+    pub is_active: bool,
+    pub time: i32,
+}
+
+impl Default for AutoHide {
+    fn default() -> Self {
+        Self { is_active: false, time: 3 }
     }
 }
 

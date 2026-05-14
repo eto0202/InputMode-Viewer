@@ -1,4 +1,7 @@
-use crate::{common::app_config::PolicyMode, core::app::prelude::*};
+use crate::{
+    common::app_config::{DisplayStyle, PolicyMode},
+    core::app::prelude::*,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -116,12 +119,17 @@ impl Controller {
         el.set_control_flow(ControlFlow::Wait);
         wait_tray_event(el); // タスクトレイイベント
 
-        if !self.state.displayed {
+        let core = self.core.as_ref().context("AppCore Missing")?;
+        let cfg = core.cfg.load();
+        let is_always = match cfg.active_role {
+            WindowRole::Fixed => cfg.fixed.display_style != DisplayStyle::Always,
+            WindowRole::Floating => cfg.floating.display_style != DisplayStyle::Always,
+        };
+
+        if !self.state.displayed && is_always {
             return Ok(());
         }
 
-        let core = self.core.as_ref().context("AppCore Missing")?;
-        let cfg = core.cfg.load();
         let mut pt = POINT::default();
         unsafe { GetCursorPos(&mut pt) }?;
 
@@ -227,6 +235,7 @@ fn config_update(
     }
     // 最新データを直接渡して反映
     apply_config_to_all(core, state, new_cfg)?;
+    log::debug!("Apply config to all");
 
     if admin_changed {
         apply_admin_changed(new_cfg)?;
@@ -279,8 +288,13 @@ fn handle_redraw_requested(
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
     );
+    let cfg = core.cfg.load();
+    let is_always = match cfg.active_role {
+        WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
+        WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
+    };
 
-    if displayed {
+    if displayed || is_always {
         core.renderer.draw(mode, &style, w, h, style.padding)?;
 
         if is_animation {

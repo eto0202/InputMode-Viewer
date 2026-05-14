@@ -1,6 +1,6 @@
 use crate::{
     common::{
-        app_config::{self, AppConfig, D2d1ColorExt, GpuiColorExt},
+        app_config::{self, AppConfig, D2d1ColorExt, DisplayStyle, GpuiColorExt},
         config,
     },
     ui::{components::color_picker::ColorPickerSettingItem, window::SettingsWindow},
@@ -69,15 +69,14 @@ impl Floating {
                 "Font Size",
                 SettingField::number_input(
                     NumberFieldOptions {
-                        min: 0.0,
+                        min: 5.0,
                         max: 100.0,
                         step: 1.0,
                         precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).floating.style.font_size.into(),
                     |val: f64, cx: &mut App| {
-                        let size = val.clamp(5.0, 5.0);
-                        AppConfig::global_mut(cx).floating.style.font_size = size as f32;
+                        AppConfig::global_mut(cx).floating.style.font_size = val as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -142,8 +141,7 @@ impl Floating {
                     },
                     |cx: &App| AppConfig::global(cx).floating.style.padding.into(),
                     |val: f64, cx: &mut App| {
-                        let p = val.clamp(0.0, 0.0);
-                        AppConfig::global_mut(cx).floating.style.padding = p as f32;
+                        AppConfig::global_mut(cx).floating.style.padding = val as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -161,8 +159,7 @@ impl Floating {
                     },
                     |cx: &App| (AppConfig::global(cx).floating.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
-                        let o = val.clamp(1.0, 1.0);
-                        AppConfig::global_mut(cx).floating.style.opacity = (o / 100.0) as f32;
+                        AppConfig::global_mut(cx).floating.style.opacity = (val / 100.0) as f32;
 
                         let _ = config::save_config(AppConfig::global(cx));
                     },
@@ -181,8 +178,7 @@ impl Floating {
                     },
                     |cx: &App| AppConfig::global(cx).floating.offset.x.into(),
                     |val: f64, cx: &mut App| {
-                        let x = val.clamp(-50.0, -50.0);
-                        AppConfig::global_mut(cx).floating.offset.x = x as i32;
+                        AppConfig::global_mut(cx).floating.offset.x = val as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -200,8 +196,7 @@ impl Floating {
                     },
                     |cx: &App| AppConfig::global(cx).floating.offset.y.into(),
                     |val: f64, cx: &mut App| {
-                        let y = val.clamp(-50.0, -50.0);
-                        AppConfig::global_mut(cx).floating.offset.y = y as i32;
+                        AppConfig::global_mut(cx).floating.offset.y = val as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -217,15 +212,52 @@ impl Floating {
                             step: 0.01,
                             precision: Some(2),
                         },
-                    |cx: &App| AppConfig::global(cx).floating.frequency as f64,
+                    |cx: &App| {
+                        ((AppConfig::global(cx).floating.frequency * 100.0).round() / 100.0)
+                            .to_string()
+                            .parse::<f64>()
+                            .unwrap()
+                    },
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.frequency = val as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
-                .default_value(((AppConfig::default().floating.frequency * 100.0).round() / 100.0) as f64),
+                .default_value(
+                    ((AppConfig::default().floating.frequency * 100.0).round() / 100.0)
+                        .to_string()
+                        .parse::<f64>()
+                        .unwrap()
+                ),
             )
-            .description("Mouse tracking frequency:\nMin 0.01, Max 0.1, Default 0.05\nThe lower the value, the smoother the tracking."),
+            .description("Mouse tracking frequency:\nMin 0.001, Max 0.1, Default 0.05\nThe lower the value, the smoother the tracking."),
+            SettingItem::new(
+                "Display Style",
+                SettingField::dropdown(
+                    vec![
+                        (DisplayStyle::Smart.as_ref().into(), "Smart".into()),
+                        (DisplayStyle::Always.as_ref().into(), "Always".into()),
+                    ],
+                    |cx: &App| {
+                        AppConfig::global(cx)
+                            .floating
+                            .display_style
+                            .as_ref()
+                            .to_string()
+                            .into()
+                    },
+                    |val: SharedString, cx: &mut App| {
+                        let role = val
+                            .as_str()
+                            .parse::<DisplayStyle>()
+                            .unwrap_or(DisplayStyle::Smart);
+                        AppConfig::global_mut(cx).floating.display_style = role;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().floating.display_style.as_ref().to_string()),
+            )
+            .description("Display style: Default Smart\nAlways: Always display on screen.\nSmart: Automatically switch display settings."),
         ]
     }
 }

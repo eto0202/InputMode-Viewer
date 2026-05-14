@@ -29,7 +29,7 @@ pub fn general(
                         });
                         // let _ = config::save_config(AppConfig::global(cx));
                     },
-                ).default_value(AppConfig::default().administrator),
+                ),
             )
             .description("If this doesn't work in some apps, please enable it."),
             SettingItem::new(
@@ -45,7 +45,7 @@ pub fn general(
                         });
                         // let _ = config::save_config(AppConfig::global(cx));
                     },
-                ).default_value(AppConfig::default().startup),
+                ),
             )
             .description("Run automatically when the PC starts up. Based on current permissions.\nAdministrator: HIGHEST, Standard User: LUA"),
             SettingItem::new(

@@ -1,6 +1,6 @@
 use crate::{
     common::{
-        app_config::{self, AppConfig, D2d1ColorExt, GpuiColorExt, WindowPos},
+        app_config::{self, AppConfig, D2d1ColorExt, DisplayStyle, GpuiColorExt, WindowPos},
         config,
     },
     ui::{components::color_picker::ColorPickerSettingItem, window::SettingsWindow},
@@ -69,16 +69,17 @@ impl Fixed {
                 "Font Size",
                 SettingField::number_input(
                     NumberFieldOptions {
-                        min: 0.0,
+                        min: 5.0,
                         max: 100.0,
                         step: 1.0,
                         precision: None,
                     },
                     |cx: &App| AppConfig::global(cx).fixed.style.font_size.into(),
                     |val: f64, cx: &mut App| {
-                        let size = val.clamp(5.0, 5.0);
-                        AppConfig::global_mut(cx).fixed.style.font_size = size as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        log::debug!("Changed font Size val: {:?}", val);
+                        AppConfig::global_mut(cx).fixed.style.font_size = val as f32;
+                        let e = config::save_config(AppConfig::global(cx));
+                        log::debug!("Font Size Error: {:?}", e);
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.font_size),
@@ -142,8 +143,7 @@ impl Fixed {
                     },
                     |cx: &App| AppConfig::global(cx).fixed.style.padding.into(),
                     |val: f64, cx: &mut App| {
-                        let p = val.clamp(0.0, 0.0);
-                        AppConfig::global_mut(cx).fixed.style.padding = p as f32;
+                        AppConfig::global_mut(cx).fixed.style.padding = val as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -154,15 +154,14 @@ impl Fixed {
                 "Opacity",
                 SettingField::number_input(
                     NumberFieldOptions {
-                        min: 0.0,
+                        min: 1.0,
                         max: 100.0,
                         precision: None,
                         step: 1.0,
                     },
                     |cx: &App| (AppConfig::global(cx).fixed.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
-                        let o = val.clamp(1.0, 1.0);
-                        AppConfig::global_mut(cx).fixed.style.opacity = (o / 100.0) as f32;
+                        AppConfig::global_mut(cx).fixed.style.opacity = (val / 100.0) as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
@@ -204,14 +203,40 @@ impl Fixed {
                     },
                     |cx: &App| (AppConfig::global(cx).fixed.margin) as f64,
                     |val: f64, cx: &mut App| {
-                        let m = val.clamp(0.0, 0.0);
-                        AppConfig::global_mut(cx).fixed.margin = m as i32;
+                        AppConfig::global_mut(cx).fixed.margin = val as i32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
                 .default_value(AppConfig::default().fixed.margin),
             )
             .description("Margin : Min 0, Max 500, Default 20"),
+            SettingItem::new(
+                "Display Style",
+                SettingField::dropdown(
+                    vec![
+                        (DisplayStyle::Smart.as_ref().into(), "Smart".into()),
+                        (DisplayStyle::Always.as_ref().into(), "Always".into()),
+                    ],
+                    |cx: &App| {
+                        AppConfig::global(cx)
+                            .fixed
+                            .display_style
+                            .as_ref()
+                            .to_string()
+                            .into()
+                    },
+                    |val: SharedString, cx: &mut App| {
+                        let role = val
+                            .as_str()
+                            .parse::<DisplayStyle>()
+                            .unwrap_or(DisplayStyle::Smart);
+                        AppConfig::global_mut(cx).fixed.display_style = role;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().fixed.display_style.as_ref().to_string()),
+            )
+            .description("Display style: Default Smart\nAlways: Always display on screen.\nSmart: Automatically switch display settings."),
         ]
     }
 }

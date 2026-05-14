@@ -39,7 +39,7 @@ impl SettingsWindow {
         let cfg = config::load_config();
 
         if !cx.has_global::<AppConfig>() {
-            cx.set_global(cfg);
+            cx.set_global(cfg.clone());
         }
 
         Self {
@@ -48,8 +48,8 @@ impl SettingsWindow {
             process_list: ProcessList::new(window, cx),
             is_restart: false,
             is_later: false,
-            cur_admin: AppConfig::global(cx).administrator,
-            cur_start: AppConfig::global(cx).startup,
+            cur_admin: cfg.administrator,
+            cur_start: cfg.startup,
         }
     }
 }
