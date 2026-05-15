@@ -341,11 +341,23 @@ impl DCompRenderer {
     }
 
     // 透明度操作
+    // SetOpacity2 で新たに値がセットされると、アニメーションが途中で止まる？
+    // 上書き出来ないっぽい
+    // アニメーションをアニメーションで上書きなら出来るので
+    // 即座に opacity を 0 にするというアニメーションを行う
     pub fn set_opacity(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
-            self.dcomp_effect_group.SetOpacity2(opacity)?;
-            self.dcomp_device.Commit()?
-        };
+            let animation = self.dcomp_device.CreateAnimation()?;
+
+            animation.AddCubic(0.0, opacity, 0.0, 0.0, 0.0)?;
+
+            // 以前のアニメーションのタイムラインが即座にこの値で上書きされる
+            animation.End(0.0, opacity)?;
+
+            // SetOpacity2 ではなく、アニメーション用の SetOpacity を使用
+            self.dcomp_effect_group.SetOpacity(&animation)?;
+            self.dcomp_device.Commit()?;
+        }
         Ok(())
     }
 
@@ -371,6 +383,60 @@ impl DCompRenderer {
             // 値を固定しアニメーションを完成
             animation.End(duration, opacity)?;
             // アニメーションを適用
+            self.dcomp_effect_group.SetOpacity(&animation)?;
+            self.dcomp_device.Commit()?;
+        }
+        Ok(())
+    }
+
+    pub fn auto_hide(
+        &self,
+        opacity: f32,
+        auto_hide_time: f32,
+        is_refresh: bool,
+    ) -> anyhow::Result<()> {
+        // opacity 目標の不透明度
+        // auto_hide_time 表示を維持する時間 (秒)
+        let duration: f64 = 0.16; // フェードイン・アウトにかける時間 (秒)
+        // リフレッシュなら現在の不透明度から、新規なら0.0から
+        let start_value = if is_refresh { opacity } else { 0.0 };
+
+        // 速度の計算
+        let linear_velocity = (opacity - start_value) / duration as f32;
+        let fade_out_velocity = -linear_velocity; // フェードアウトは逆向きの速度
+
+        unsafe {
+            let animation = self.dcomp_device.CreateAnimation()?;
+            // フェードイン (0.0s ～ 0.16s)
+            animation.AddCubic(
+                0.0,             // 開始時間
+                start_value,     // 0.0
+                linear_velocity, // 速度
+                0.0,
+                0.0,
+            )?;
+            // 表示固定 (0.16s ～ 0.16s + auto_hide_time)
+            animation.AddCubic(
+                duration, // 0.16s から開始
+                opacity,  // 目標値(1.0)に達している
+                0.0,      // 速度 0 で維持
+                0.0, 0.0,
+            )?;
+            // フェードアウト (hold_end ～ hold_end + duration)
+            let fade_out_start = duration + auto_hide_time as f64;
+            animation.AddCubic(
+                fade_out_start,    // 維持が終わった瞬間から開始
+                opacity,           // 開始時の値は 1.0
+                fade_out_velocity, // 負の速度で 0.0 へ向かう
+                0.0,
+                0.0,
+            )?;
+            // 終了
+            let end_time = fade_out_start + duration;
+            animation.End(
+                end_time, 0.0, // 最終値は 0.0
+            )?;
+
             self.dcomp_effect_group.SetOpacity(&animation)?;
             self.dcomp_device.Commit()?;
         }

@@ -1,15 +1,4 @@
-use gpui::{App, BorrowAppContext, Context, IntoElement, ParentElement, Styled, Task, Window};
-use gpui_component::{
-    Icon, IconName, IndexPath,
-    button::Button,
-    h_flex,
-    list::{ListDelegate, ListItem, ListState},
-};
-
-use crate::common::{
-    app_config::{AppConfig, PolicyMode},
-    config,
-};
+use crate::ui::prelude::*;
 
 pub struct ProcessListDelegate {
     all_items: Vec<String>,

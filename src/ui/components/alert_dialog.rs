@@ -1,18 +1,4 @@
-use gpui::{App, IntoElement, ParentElement, Styled, WeakEntity};
-
-use gpui_component::{
-    ActiveTheme,
-    button::{Button, ButtonVariants},
-    dialog::{
-        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
-        DialogTitle,
-    },
-};
-
-use crate::{
-    common::{app_config::AppConfig, config},
-    ui::window::SettingsWindow,
-};
+use crate::ui::prelude::*;
 
 pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) -> impl IntoElement {
     let close = entity.clone();

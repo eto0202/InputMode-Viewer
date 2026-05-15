@@ -1,25 +1,4 @@
-use crate::{
-    common::{
-        app_config::{AppConfig, PolicyMode},
-        config,
-    },
-    core::utils,
-    ui::{components::list_components::delegate::CfgListDelegate, window::SettingsWindow},
-};
-use gpui::*;
-use gpui::{Entity, SharedString};
-use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable,
-    button::Button,
-    h_flex,
-    input::{Input, InputEvent, InputState},
-    list::{List, ListState},
-    resizable::{h_resizable, resizable_panel},
-    setting::{SettingField, SettingItem},
-    v_flex,
-};
-
-use crate::ui::components::list_components::delegate::ProcessListDelegate;
+use crate::ui::prelude::*;
 
 pub struct ProcessList {
     pub search_input: Entity<InputState>,

@@ -1,12 +1,4 @@
-use crate::{
-    common::{
-        app_config::{AppConfig, ConfigTheme, WindowRole},
-        config,
-    },
-    ui::window::SettingsWindow,
-};
-use gpui::{App, Context, SharedString, *};
-use gpui_component::setting::{SettingField, SettingItem};
+use crate::ui::prelude::*;
 
 pub fn general(
     _: &mut Window,
@@ -40,7 +32,7 @@ pub fn general(
                         let _ = entity2.update(cx, |this, cx| {
                             this.is_restart = true;
                             this.cur_start = val;
-                            
+
                             cx.notify();
                         });
                         // let _ = config::save_config(AppConfig::global(cx));

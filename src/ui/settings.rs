@@ -1,21 +1,5 @@
-use crate::{
-    common::app_config::{AppConfig, ConfigTheme},
-    core::sys::win_style,
-    ui::window,
-};
 use anyhow::Context;
-use gpui::*;
-use gpui_component::{Root, Theme};
-use gpui_component_assets::Assets;
-use windows::Win32::{
-    Foundation::CloseHandle,
-    System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
-};
-use windows::Win32::{
-    Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE},
-    System::Threading::CreateMutexW,
-};
-use windows_core::PCWSTR;
+use crate::ui::prelude::*;
 
 pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     // ユニークな名前でMutexを作成
@@ -48,7 +32,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
             gpui_component::init(cx);
 
             if let Err(e) = cx.open_window(options, |w, cx| {
-                let s_v = cx.new(|cx| window::SettingsWindow::new(w, cx));
+                let s_v = cx.new(|cx| SettingsWindow::new(w, cx));
                 log::info!("Create SettingsWindow successful");
                 cx.new(|cx| {
                     let root = Root::new(s_v, w, cx);

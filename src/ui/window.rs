@@ -1,16 +1,4 @@
-use crate::{
-    common::{app_config::AppConfig, config},
-    ui::components::{
-        alert_dialog::restart_alert_dialog, fixed::Fixed, floating::Floating, general::general,
-        list_components::process_list::ProcessList,
-    },
-};
-use gpui::*;
-use gpui_component::{
-    button::{Button, ButtonVariants},
-    setting::{SettingGroup, SettingPage, Settings},
-    *,
-};
+use crate::ui::prelude::*;
 
 impl Global for AppConfig {}
 
@@ -65,7 +53,7 @@ impl Render for SettingsWindow {
             .child(
                 div().relative().size_full().child(
                     Settings::new("app-config")
-                        .with_group_variant(group_box::GroupBoxVariant::Outline)
+                        .with_group_variant(GroupBoxVariant::Outline)
                         .sidebar_width(px(180.0))
                         .pages(vec![
                             // ページ（左側のサイドバーメニュー）

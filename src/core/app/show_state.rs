@@ -1,26 +1,34 @@
-// 「隠す」「フェードイン中」「表示中」の3つの状態で管理し、アニメーションを実装
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum ShowState {
     Hidden,
     Visible,
 }
 
 impl ShowState {
-    pub fn is_animation(&mut self, displayed: bool) -> bool {
-        match (displayed, *self) {
-            // 非表示にすべき時
-            (false, _) => {
-                *self = ShowState::Hidden;
-                false // 透明度は0 次の再描画は不要
-            }
-            // 非表示から表示へ：フェードイン命令を出し、状態をVisibleへ
-            (true, ShowState::Hidden) => {
+    // 描画が必要なタイミングかどうかを判定
+    pub fn update(&mut self, should_show: bool, refresh_requested: bool) -> AnimationAction {
+        match (*self, should_show) {
+            // 非表示 -> 表示
+            (ShowState::Hidden, true) => {
                 *self = ShowState::Visible;
-                true
+                AnimationAction::StartFadeIn
             }
-
-            // 表示中から非表示へ：フェードアウト命令を出し、状態をHiddenへ
-            (true, ShowState::Visible) => false,
+            // 表示中 -> 表示中 (操作があった場合のリフレッシュ)
+            (ShowState::Visible, true) if refresh_requested => AnimationAction::Refresh,
+            // 表示 -> 非表示
+            (ShowState::Visible, false) => {
+                *self = ShowState::Hidden;
+                AnimationAction::Hide
+            }
+            _ => AnimationAction::None,
         }
     }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum AnimationAction {
+    None,
+    StartFadeIn, // 0.0 からフェードイン
+    Refresh,     // 1.0 から再開
+    Hide,        // 0.0 へ
 }

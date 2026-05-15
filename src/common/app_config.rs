@@ -63,22 +63,27 @@ impl Default for FixedWindow {
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
 pub enum DisplayStyle {
     Always,
-    #[default]
-    Smart,
+    Smart(AutoHide),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+impl Default for DisplayStyle {
+    fn default() -> Self {
+        Self::Smart(AutoHide::default())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct AutoHide {
-    pub is_active: bool,
-    pub time: i32,
+    pub enabled: bool,
+    pub time: f32,
 }
 
 impl Default for AutoHide {
     fn default() -> Self {
-        Self { is_active: false, time: 3 }
+        Self { enabled: false, time: 3.0 }
     }
 }
 

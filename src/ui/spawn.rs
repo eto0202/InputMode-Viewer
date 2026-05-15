@@ -1,5 +1,5 @@
 use anyhow::Context;
-use std::{os::windows::process::CommandExt, process::Command};
+use crate::ui::prelude::*;
 
 // Windowsのプロセス作成フラグ
 const CREATE_NO_WINDOW: u32 = 0x08000000;

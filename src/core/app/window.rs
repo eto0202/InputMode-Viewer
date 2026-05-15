@@ -4,7 +4,6 @@ pub struct MainWindow {
     pub window: Arc<Window>,
     pub hwnd: HWND,
     pub role: WindowRole,
-    pub show_state: ShowState,
 }
 
 impl MainWindow {
@@ -37,7 +36,6 @@ impl MainWindow {
             window,
             hwnd,
             role,
-            show_state: ShowState::Hidden,
         })
     }
 }

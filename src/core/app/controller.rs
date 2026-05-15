@@ -20,6 +20,8 @@ pub struct AppState {
     pub cap: InputCapability,
     pub mode: InputMode,
     pub displayed: bool,
+    pub refresh_requested: bool,
+    pub show_state: ShowState,
     pub v_screen: VirtualScreen,
     pub floating: POINT,
     pub fixed: POINT,
@@ -33,6 +35,8 @@ impl Default for Controller {
                 cap: InputCapability::default(),
                 mode: InputMode::default(),
                 displayed: false,
+                refresh_requested: false,
+                show_state: ShowState::Hidden,
                 v_screen: VirtualScreen::default(),
                 floating: POINT::default(),
                 fixed: POINT::default(),
@@ -99,9 +103,11 @@ impl Controller {
         match e {
             WindowEvent::RedrawRequested => {
                 let core = self.core.as_mut().context("AppCore missing")?;
+                let displayed = self.state.displayed;
+                let mode = self.state.mode;
                 let style = AppCore::get_style(&core.cfg, core.mw.role)?;
                 let metrics =
-                    handle_redraw_requested(core, style, self.state.displayed, self.state.mode)?;
+                    handle_redraw_requested(core, &mut self.state, style, displayed, mode)?;
                 self.state.metrics = metrics;
             }
             WindowEvent::ScaleFactorChanged { .. } => {
@@ -122,11 +128,11 @@ impl Controller {
         let core = self.core.as_ref().context("AppCore Missing")?;
         let cfg = core.cfg.load();
         let is_always = match cfg.active_role {
-            WindowRole::Fixed => cfg.fixed.display_style != DisplayStyle::Always,
-            WindowRole::Floating => cfg.floating.display_style != DisplayStyle::Always,
+            WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
+            WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
         };
 
-        if !self.state.displayed && is_always {
+        if !self.state.displayed && !is_always {
             return Ok(());
         }
 
@@ -158,9 +164,16 @@ impl Controller {
                 let core = self.core.as_ref().context("AppCore Missing")?;
                 if self.state.mode != mode {
                     resize_request(mode, core)?;
+                    self.state.refresh_requested = true; // リフレッシュ要求
                 }
                 self.state.mode = mode;
+                let old_displayed = self.state.displayed;
                 self.state.displayed = check_displayed(&self.state, core)?;
+
+                // 非表示から表示に変更する場合（新規フェードイン）
+                if !old_displayed && self.state.displayed {
+                    self.state.refresh_requested = true;
+                }
             }
             Message::ConfigUpdated => {
                 let core = self.core.as_mut().context("AppCore Missing")?;
@@ -278,29 +291,76 @@ pub fn apply_config_to_all(
 
 fn handle_redraw_requested(
     core: &mut AppCore,
+    state: &mut AppState,
     style: WindowStyle,
     displayed: bool,
     mode: InputMode,
 ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
-    let is_animation = core.mw.show_state.is_animation(displayed);
     let metrics = core.renderer.calc_metrics(mode, style.text_style)?;
     let (w, h) = (
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
     );
     let cfg = core.cfg.load();
-    let is_always = match cfg.active_role {
-        WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
-        WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
+    let (is_always, auto_hide_enabled, auto_hide_time) = match cfg.active_role {
+        WindowRole::Fixed => {
+            let is_always = cfg.fixed.display_style == DisplayStyle::Always;
+            let auto_hide_enable = cfg.fixed.auto_hide.enabled;
+            let auto_hide_time = cfg.fixed.auto_hide.time;
+            (is_always, auto_hide_enable, auto_hide_time)
+        }
+        WindowRole::Floating => {
+            let is_always = cfg.floating.display_style == DisplayStyle::Always;
+            let auto_hide_enable = cfg.floating.auto_hide.enabled;
+            let auto_hide_time = cfg.floating.auto_hide.time;
+            (is_always, auto_hide_enable, auto_hide_time)
+        }
     };
 
-    if displayed || is_always {
+    // displayed: 今表示すべきかどうか
+    // is_always: 常に表示設定か
+    // auto_hide_enabled: 自動非表示が設定でONか
+    let should_show = displayed || is_always;
+    let action = state
+        .show_state
+        .update(should_show, state.refresh_requested);
+    state.refresh_requested = false;
+
+    if should_show {
         core.renderer.draw(mode, &style, w, h, style.padding)?;
 
-        if is_animation {
-            core.renderer.fade_in(style.opacity)?;
+        log::debug!("RENDER: Visible path");
+        if is_always {
+            core.renderer.set_opacity(style.opacity)?;
+        } else {
+            match action {
+                AnimationAction::StartFadeIn => {
+                    if auto_hide_enabled {
+                        log::debug!("RENDER: Start AutoHide");
+                        core.renderer
+                            .auto_hide(style.opacity, auto_hide_time, false)?;
+                    } else {
+                        core.renderer.fade_in(style.opacity)?;
+                    }
+                }
+                AnimationAction::Refresh => {
+                    if auto_hide_enabled {
+                        log::debug!("RENDER: Start AutoHide Refresh");
+                        core.renderer
+                            .auto_hide(style.opacity, auto_hide_time, true)?;
+                    } else {
+                        // 常に表示モードなら、Refreshが来ても何もしない
+                    }
+                }
+                _ => {
+                    if !auto_hide_enabled {
+                        core.renderer.set_opacity(style.opacity)?;
+                    }
+                }
+            }
         }
     } else {
+        log::debug!("RENDER: Hide path (Set 0.0)");
         core.renderer.set_opacity(0.0)?;
     }
     Ok(metrics)
