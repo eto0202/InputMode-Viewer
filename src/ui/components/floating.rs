@@ -222,7 +222,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.opacity * 100.0),
             )
-            .description("Opacity (%): Min 1, Max 100, Default 50"),
+            .description("Opacity (%): Min 1, Max 100, Default 50\nNote: You must enable \"Transparent\"."),
             SettingItem::new(
                 "Offset X",
                 SettingField::number_input(

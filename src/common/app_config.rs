@@ -9,6 +9,7 @@ use windows::Win32::{Foundation::POINT, Graphics::Direct2D::Common::D2D1_COLOR_F
 pub struct AppConfig {
     pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
     pub administrator: bool,
+    pub transparent: bool, // 透過
     pub cfg_theme: ConfigTheme,
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ

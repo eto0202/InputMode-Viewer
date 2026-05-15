@@ -41,6 +41,17 @@ pub fn general(
             )
             .description("Run automatically when the PC starts up. Based on current permissions.\nAdministrator: HIGHEST, Standard User: LUA"),
             SettingItem::new(
+                "Transparent",
+                SettingField::checkbox(
+                    |cx: &App| AppConfig::global(cx).transparent,
+                    |val: bool, cx: &mut App| {
+                        AppConfig::global_mut(cx).transparent = val;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                ).default_value(AppConfig::default().transparent),
+            )
+            .description("Enable transparency to smooth out dark edges.\nNote: This will slightly increase system load."),
+            SettingItem::new(
                 "Theme Mode",
                 SettingField::dropdown(
                     vec![

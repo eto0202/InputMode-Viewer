@@ -61,9 +61,12 @@ impl Render for SettingsWindow {
                                 .default_open(true)
                                 .groups(vec![
                                     // グループ（メイン領域のセクション）
-                                    SettingGroup::new()
-                                        .title("General")
-                                        .items(general(window, cx, self.cur_admin, self.cur_start)),
+                                    SettingGroup::new().title("General").items(general(
+                                        window,
+                                        cx,
+                                        self.cur_admin,
+                                        self.cur_start,
+                                    )),
                                     SettingGroup::new()
                                         .title("Fixed")
                                         .items(Fixed::fixed(&mut self.fixed)),

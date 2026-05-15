@@ -274,6 +274,7 @@ pub fn apply_config_to_all(
     };
 
     // Rendererのリソース（色、フォント）を更新
+    core.renderer.request_alpha_mode(cfg.transparent);
     core.renderer.update_config(style)?;
     // サイズの再計算とリサイズ
     let metrics = core.renderer.calc_metrics(state.mode, style.text_style)?;
@@ -301,6 +302,7 @@ fn handle_redraw_requested(
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
     );
+
     let cfg = core.cfg.load();
     let (is_always, auto_hide_enabled, auto_hide_time) = match cfg.active_role {
         WindowRole::Fixed => {
@@ -327,16 +329,16 @@ fn handle_redraw_requested(
     state.refresh_requested = false;
 
     if should_show {
-        core.renderer.draw(mode, &style, w, h, style.padding)?;
+        let scale = core.mw.window.scale_factor();
+        core.renderer
+            .draw(mode, &style, w, h, scale, cfg.transparent)?;
 
-        log::debug!("RENDER: Visible path");
         if is_always {
             core.renderer.set_opacity(style.opacity)?;
         } else {
             match action {
                 AnimationAction::StartFadeIn => {
                     if auto_hide_enabled {
-                        log::debug!("RENDER: Start AutoHide");
                         core.renderer
                             .auto_hide(style.opacity, auto_hide_time, false)?;
                     } else {
@@ -345,7 +347,6 @@ fn handle_redraw_requested(
                 }
                 AnimationAction::Refresh => {
                     if auto_hide_enabled {
-                        log::debug!("RENDER: Start AutoHide Refresh");
                         core.renderer
                             .auto_hide(style.opacity, auto_hide_time, true)?;
                     } else {
@@ -360,7 +361,6 @@ fn handle_redraw_requested(
             }
         }
     } else {
-        log::debug!("RENDER: Hide path (Set 0.0)");
         core.renderer.set_opacity(0.0)?;
     }
     Ok(metrics)

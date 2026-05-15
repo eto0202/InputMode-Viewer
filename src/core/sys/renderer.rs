@@ -10,7 +10,8 @@ use windows::{
         Graphics::{
             Direct2D::{
                 Common::{
-                    D2D_RECT_F, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+                    D2D_RECT_F, D2D1_ALPHA_MODE, D2D1_ALPHA_MODE_IGNORE,
+                    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
                 },
                 *,
             },
@@ -45,6 +46,8 @@ use windows::{
 
 #[derive(Debug)]
 pub struct DCompRenderer {
+    pub d3d_device: ID3D11Device,
+    pub dxgi_factory: IDXGIFactory2,
     pub d2d_factory: ID2D1Factory1,
     pub dw_factory: IDWriteFactory,
     pub d2d_context: ID2D1DeviceContext, // 実際の描画命令を出すためのコンテキスト
@@ -66,6 +69,11 @@ pub struct DCompRenderer {
     pub current_bg_color: D2D1_COLOR_F,
 
     pub waitable_object: HANDLE,
+
+    // 現在のスワップチェーンがどちらのモードで作られているか
+    pub current_alpha_mode: D2D1_ALPHA_MODE,
+    // 作り直しフラグ（Noneなら作り直し不要）
+    pub pending_alpha_recreation: Option<D2D1_ALPHA_MODE>,
 }
 
 impl DCompRenderer {
@@ -74,6 +82,7 @@ impl DCompRenderer {
         mode: InputMode,
         style: &WindowStyle,
         scale: f64,
+        transparent: bool,
     ) -> anyhow::Result<(Self, f32, f32)> {
         // グラフィックスの基盤（D3D, DXGI, D2D）
         let (d3d_device, dxgi_device, dxgi_factory, d2d_factory, d2d_context) = unsafe {
@@ -93,7 +102,7 @@ impl DCompRenderer {
                 None,               // デバイスコンテキストの受け取り先
             )?;
 
-            let d3d_device = d3d_device.unwrap();
+            let d3d_device = d3d_device.context("Nothing d3d_device")?;
             let dxgi_device: IDXGIDevice = d3d_device.cast()?;
             // DXGISwapChain(Flip Model)の作成
             // 描画結果を画面に送り出すためのダブルバッファ
@@ -170,6 +179,19 @@ impl DCompRenderer {
             (dw_factory, format, lw, lh)
         };
 
+        let alpha_mode = if transparent {
+            DXGI_ALPHA_MODE_PREMULTIPLIED
+        } else {
+            DXGI_ALPHA_MODE_IGNORE
+        };
+
+        let current_alpha_mode = if transparent {
+            D2D1_ALPHA_MODE_PREMULTIPLIED
+        } else {
+            D2D1_ALPHA_MODE_IGNORE
+        };
+        let pending_alpha_recreation = Some(current_alpha_mode);
+
         // 画面出力系（SwapChain, Brushes）
         let (swap_chain, waitable_object, font_brush, bg_brush) = unsafe {
             let pw = (lw * scale as f32) as u32;
@@ -189,7 +211,7 @@ impl DCompRenderer {
                 BufferCount: 2, // ダブルバッファ（描画中と表示中の2枚持つ）
                 Scaling: DXGI_SCALING_STRETCH, // ウィンドウサイズが変わった時の引き伸ばし設定
                 SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD, // 最新の高速な画面切り替え方式
-                AlphaMode: DXGI_ALPHA_MODE_PREMULTIPLIED, // 透過ウィンドウにするならこれ
+                AlphaMode: alpha_mode,
                 Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
             };
 
@@ -223,6 +245,8 @@ impl DCompRenderer {
         log::info!("Commit OK");
 
         let renderer = Self {
+            d3d_device,
+            dxgi_factory,
             d2d_factory,
             dw_factory,
             d2d_context,
@@ -237,6 +261,8 @@ impl DCompRenderer {
             current_bg_color: style.bg_color,
             current_font_size: style.font_size,
             waitable_object,
+            current_alpha_mode,
+            pending_alpha_recreation,
         };
 
         Ok((renderer, lw, lh))
@@ -244,14 +270,29 @@ impl DCompRenderer {
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
     pub fn draw(
-        &self,
+        &mut self,
         mode: InputMode,
         style: &WindowStyle,
         w: f32,
         h: f32,
-        p: f32,
+        scale: f64,
+        transparent: bool,
     ) -> anyhow::Result<()> {
         unsafe {
+            // 1作り直し予約があるかチェック
+            if let Some(new_mode) = self.pending_alpha_recreation.take() {
+                if self
+                    .recreate_swapchain(transparent, mode, style, scale)
+                    .is_ok()
+                {
+                    // 成功したときだけ、現在のモードを書き換える
+                    self.current_alpha_mode = new_mode;
+                } else {
+                    log::error!("Failed to recreate swap chain");
+                    return Ok(());
+                }
+            }
+
             // GPUの準備ができるまで待機
             WaitForSingleObject(self.waitable_object, 1000);
             // SwapChainのバッファをD2Dの描き先に設定
@@ -261,7 +302,7 @@ impl DCompRenderer {
             let bitmap_props = D2D1_BITMAP_PROPERTIES1 {
                 pixelFormat: D2D1_PIXEL_FORMAT {
                     format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                    alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+                    alphaMode: self.current_alpha_mode,
                 },
                 bitmapOptions: D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
                 ..Default::default()
@@ -296,6 +337,7 @@ impl DCompRenderer {
         };
 
         // paddingを加味した描画領域
+        let p = style.padding;
         let text_rect = D2D_RECT_F {
             left: p,
             top: p,
@@ -559,5 +601,100 @@ impl DCompRenderer {
             self.dcomp_device.Commit()?;
         }
         Ok(())
+    }
+
+    pub fn recreate_swapchain(
+        &mut self,
+        transparent: bool,
+        mode: InputMode,
+        style: &WindowStyle,
+        scale: f64,
+    ) -> anyhow::Result<()> {
+        log::info!("Recreate swapchain");
+        unsafe {
+            self.d2d_context.SetTarget(None);
+            // waitable_object を閉じる
+            if !self.waitable_object.is_invalid() {
+                CloseHandle(self.waitable_object)?;
+            }
+
+            let str = mode.as_str(style.text_style);
+            let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
+            let text_layout =
+                self.dw_factory
+                    .CreateTextLayout(&text, &self.format, f32::MAX, f32::MAX)?;
+
+            let mut metrics: DWRITE_TEXT_METRICS = Default::default();
+            text_layout.GetMetrics(&mut metrics)?;
+
+            let lw = metrics.width + style.padding * 2.0;
+            let lh = metrics.height + style.padding * 2.0;
+
+            let pw = (lw * scale as f32) as u32;
+            let ph = (lh * scale as f32) as u32;
+
+            // 新しいスワップチェーンの作成
+            let alpha_mode = if transparent {
+                DXGI_ALPHA_MODE_PREMULTIPLIED
+            } else {
+                DXGI_ALPHA_MODE_IGNORE
+            };
+
+            let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
+                Width: pw,
+                Height: ph,
+                Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                Stereo: BOOL(0),
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                BufferCount: 2,
+                Scaling: DXGI_SCALING_STRETCH,
+                SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
+                AlphaMode: alpha_mode,
+                Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
+            };
+
+            let new_swap_chain = self.dxgi_factory.CreateSwapChainForComposition(
+                &self.d3d_device,
+                &swap_chain_desc,
+                None,
+            )?;
+            self.swap_chain = new_swap_chain;
+            self.waitable_object = self
+                .swap_chain
+                .cast::<IDXGISwapChain2>()?
+                .GetFrameLatencyWaitableObject();
+
+            let dxgi_surface: IDXGISurface = self.swap_chain.GetBuffer(0)?;
+            let d2d_bitmap = self
+                .d2d_context
+                .CreateBitmapFromDxgiSurface(&dxgi_surface, None)?;
+
+            self.d2d_context.SetTarget(&d2d_bitmap);
+
+            self.dcomp_visual.SetContent(&self.swap_chain)?;
+            self.dcomp_device.Commit()?;
+        }
+        log::info!("Recreate swapchain successful");
+        Ok(())
+    }
+
+    pub fn request_alpha_mode(&mut self, transparent: bool) {
+        log::info!("Request alpha mode");
+        let mode = if transparent {
+            D2D1_ALPHA_MODE_PREMULTIPLIED
+        } else {
+            D2D1_ALPHA_MODE_IGNORE
+        };
+
+        // 現在のモードと違う場合だけ、作り直しを予約する
+        if self.current_alpha_mode != mode {
+            log::info!(
+                "current: {:?} -> changed: {:?}",
+                self.current_alpha_mode,
+                mode
+            );
+            self.pending_alpha_recreation = Some(mode);
+        }
     }
 }

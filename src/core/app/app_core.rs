@@ -19,20 +19,26 @@ impl AppCore {
     ) -> anyhow::Result<Self> {
         log::info!("Create ProxyWindow successful");
 
-        let style = AppCore::get_style(&cfg, cfg.load().active_role)?;
+        let guard = cfg.load();
+        let style = AppCore::get_style(&cfg, guard.active_role)?;
 
         let p_pos = PhysicalPosition::new(v_screen.x as f32, v_screen.y as f32);
         let p_size = PhysicalSize::new(v_screen.cx as f32, v_screen.cy as f32);
 
-        let mw = MainWindow::new(el, cfg.load().active_role, p_pos, p_size)?;
+        let mw = MainWindow::new(el, guard.active_role, p_pos, p_size)?;
         log::info!("Create ManagedWindow successful");
 
         win_style::set_window_style(mw.hwnd)?;
         log::info!("Set window style successful");
 
-        let (renderer, _w, _h) =
-            DCompRenderer::new(mw.hwnd, mode, &style, mw.window.scale_factor())
-                .context("DCompRenderer Initialize Failed")?;
+        let (renderer, _w, _h) = DCompRenderer::new(
+            mw.hwnd,
+            mode,
+            &style,
+            mw.window.scale_factor(),
+            guard.transparent,
+        )
+        .context("DCompRenderer Initialize Failed")?;
         log::info!("Create DCompRenderer successful");
 
         // トレイアイコン

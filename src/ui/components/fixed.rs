@@ -216,8 +216,8 @@ impl Fixed {
                     NumberFieldOptions {
                         min: 1.0,
                         max: 100.0,
-                        precision: None,
                         step: 1.0,
+                        precision: None,
                     },
                     |cx: &App| (AppConfig::global(cx).fixed.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
@@ -227,7 +227,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.style.opacity * 100.0),
             )
-            .description("Opacity (%): Min 1, Max 100, Default 50"),
+            .description("Opacity (%): Min 1, Max 100, Default 50\nNote: You must enable \"Transparent\"."),
             SettingItem::new(
                 "Window Position",
                 SettingField::dropdown(
