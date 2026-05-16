@@ -3,6 +3,9 @@ use crate::{
     core::app::prelude::*,
 };
 
+const TARGET_FPS: u64 = 240;
+const FRAME_DURATION: Duration = Duration::from_nanos(1_000_000_000 / TARGET_FPS);
+
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
     Cap(InputCapability), // 入力可能性
@@ -26,6 +29,7 @@ pub struct AppState {
     pub floating: POINT,
     pub fixed: POINT,
     pub metrics: DWRITE_TEXT_METRICS,
+    pub last_update_inst: Instant,
 }
 
 impl Default for Controller {
@@ -41,6 +45,7 @@ impl Default for Controller {
                 floating: POINT::default(),
                 fixed: POINT::default(),
                 metrics: DWRITE_TEXT_METRICS::default(),
+                last_update_inst: Instant::now(),
             },
             core: None,
             cfg: None,
@@ -122,34 +127,44 @@ impl Controller {
     }
 
     fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
-        el.set_control_flow(ControlFlow::Wait);
-        wait_tray_event(el); // タスクトレイイベント
+        let last_update_inst = self.state.last_update_inst;
+        let now = Instant::now();
+        let elapsed = now.duration_since(last_update_inst);
 
-        let core = self.core.as_ref().context("AppCore Missing")?;
-        let cfg = core.cfg.load();
-        let is_always = match cfg.active_role {
-            WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
-            WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
-        };
+        if elapsed >= FRAME_DURATION {
+            wait_tray_event(el); // タスクトレイイベント
 
-        if !self.state.displayed && !is_always {
-            return Ok(());
-        }
+            let core = self.core.as_ref().context("AppCore Missing")?;
+            let cfg = core.cfg.load();
+            let is_always = match cfg.active_role {
+                WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
+                WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
+            };
 
-        let mut pt = POINT::default();
-        unsafe { GetCursorPos(&mut pt) }?;
-
-        match cfg.active_role {
-            WindowRole::Floating => {
-                set_pos_floating(core, cfg, &self.state, pt)?;
-                self.state.floating = pt; // 現在のマウス座標を保存
+            if !self.state.displayed && !is_always {
+                return Ok(());
             }
-            WindowRole::Fixed => {
-                let pos = set_pos_fixed(core, cfg, &self.state, pt)?;
-                self.state.fixed = pos;
+
+            let mut pt = POINT::default();
+            unsafe { GetCursorPos(&mut pt) }?;
+
+            match cfg.active_role {
+                WindowRole::Floating => {
+                    set_pos_floating(core, cfg, &self.state, pt)?;
+                    self.state.floating = pt; // 現在のマウス座標を保存
+                }
+                WindowRole::Fixed => {
+                    let pos = set_pos_fixed(core, cfg, &self.state, pt)?;
+                    self.state.fixed = pos;
+                }
             }
+            core.mw.window.request_redraw();
+
+            self.state.last_update_inst = now;
+            el.set_control_flow(ControlFlow::WaitUntil(now + FRAME_DURATION));
+        } else {
+            el.set_control_flow(ControlFlow::WaitUntil(last_update_inst + FRAME_DURATION));
         }
-        core.mw.window.request_redraw();
 
         Ok(())
     }
