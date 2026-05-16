@@ -1,5 +1,5 @@
 use crate::{
-    common::app_config::{TextStyle, WindowStyle},
+    common::app_config::{TextFormat, WindowStyle},
     core::sys::uia::text::InputMode,
 };
 use anyhow::Context;
@@ -163,7 +163,7 @@ impl DCompRenderer {
             format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
             // 初期文字列からサイズを計算する (calc_metrics と同等の処理)
-            let str = mode.as_str(style.text_style);
+            let str = mode.as_str(style.text_format);
             let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
             let text_layout = dw_factory.CreateTextLayout(&text, &format, f32::MAX, f32::MAX)?;
 
@@ -347,7 +347,7 @@ impl DCompRenderer {
 
         // 文字列を取得
         // Rustの文字列はUTF-8、WindowsAPIはUTF-16。C言語の名残で最後は0で終わるというルール
-        let str = mode.as_str(style.text_style);
+        let str = mode.as_str(style.text_format);
         let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
 
         // 描画命令
@@ -486,8 +486,15 @@ impl DCompRenderer {
     }
 
     // マウス追従
-    pub fn mouse_tracking(&self, cx: i32, cy: i32, tx: i32, ty: i32, f: f32) -> anyhow::Result<()> {
-        let duration = f;
+    pub fn mouse_tracking(
+        &self,
+        cx: i32,
+        cy: i32,
+        tx: i32,
+        ty: i32,
+        smoothness: f32,
+    ) -> anyhow::Result<()> {
+        let duration = smoothness;
         let anim_x = unsafe { self.dcomp_device.CreateAnimation() }?;
         let velocity_x = (tx - cx) as f32 / duration;
 
@@ -512,9 +519,9 @@ impl DCompRenderer {
     pub fn calc_metrics(
         &self,
         mode: InputMode,
-        s: TextStyle,
+        f: TextFormat,
     ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
-        let str = mode.as_str(s);
+        let str = mode.as_str(f);
         let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
 
         let mut metrics: DWRITE_TEXT_METRICS = Default::default();
@@ -618,7 +625,7 @@ impl DCompRenderer {
                 CloseHandle(self.waitable_object)?;
             }
 
-            let str = mode.as_str(style.text_style);
+            let str = mode.as_str(style.text_format);
             let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
             let text_layout =
                 self.dw_factory

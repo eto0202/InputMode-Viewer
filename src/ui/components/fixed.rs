@@ -1,4 +1,4 @@
-use crate::ui::prelude::*;
+use crate::{common::app_config::{TextFormat}, ui::prelude::*};
 
 pub struct Fixed {
     pub bg_color: Entity<ColorPickerState>,
@@ -136,15 +136,13 @@ impl Fixed {
                     },
                     |cx: &App| AppConfig::global(cx).fixed.style.font_size.into(),
                     |val: f64, cx: &mut App| {
-                        log::debug!("Changed font Size val: {:?}", val);
                         AppConfig::global_mut(cx).fixed.style.font_size = val as f32;
-                        let e = config::save_config(AppConfig::global(cx));
-                        log::debug!("Font Size Error: {:?}", e);
+                        let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.font_size),
             )
-            .description("Font Size: Min 5, Max 100, Default 14"),
+            .description("Adjust the text size between 5 and 100. (Default: 14)"),
             SettingItem::new(
                 "Font Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -152,22 +150,19 @@ impl Fixed {
                     self.font_selected_color,
                 )),
             )
-            .description("Font Color: Default #F2F2F2"),
+            .description("Set the color of the text. (Default: #F2F2F2)"),
             SettingItem::new(
-                "Text Style",
+                "Text Format",
                 SettingField::dropdown(
                     vec![
-                        (app_config::TextStyle::Full.as_ref().into(), "Full".into()),
-                        (
-                            app_config::TextStyle::Compact.as_ref().into(),
-                            "Compact".into(),
-                        ),
+                        (TextFormat::Full.as_ref().into(), "Full".into()),
+                        (TextFormat::Compact.as_ref().into(),"Compact".into()),
                     ],
                     |cx: &App| {
                         AppConfig::global(cx)
                             .fixed
                             .style
-                            .text_style
+                            .text_format
                             .as_ref()
                             .to_string()
                             .into()
@@ -175,15 +170,15 @@ impl Fixed {
                     |val: SharedString, cx: &mut App| {
                         let style = val
                             .as_str()
-                            .parse::<app_config::TextStyle>()
-                            .unwrap_or(app_config::TextStyle::Full);
-                        AppConfig::global_mut(cx).fixed.style.text_style = style;
+                            .parse::<app_config::TextFormat>()
+                            .unwrap_or(app_config::TextFormat::Full);
+                        AppConfig::global_mut(cx).fixed.style.text_format = style;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
-                .default_value(AppConfig::default().active_role.as_ref().to_string()),
+                .default_value(AppConfig::default().fixed.style.text_format.as_ref().to_string()),
             )
-            .description("Text Style: Default Full"),
+            .description("Full (Default): Show all text.\nCompact: Show essential text only."),
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -191,7 +186,7 @@ impl Fixed {
                     self.bg_selected_color,
                 )),
             )
-            .description("Background Color: Default #333333"),
+            .description("Set the background color of the overlay. (Default: #333333)"),
             SettingItem::new(
                 "Padding",
                 SettingField::number_input(
@@ -209,7 +204,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.style.padding),
             )
-            .description("Padding: Min 0, Max 100, Default 5"),
+            .description("Adjust the internal spacing between the text and the window edge. (Default: 5)"),
             SettingItem::new(
                 "Opacity",
                 SettingField::number_input(
@@ -227,7 +222,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.style.opacity * 100.0),
             )
-            .description("Opacity (%): Min 1, Max 100, Default 50\nNote: You must enable \"Transparent\"."),
+            .description("Adjust the window transparency from 1% to 100%. (Default: 50%)"),
             SettingItem::new(
                 "Window Position",
                 SettingField::dropdown(
@@ -251,7 +246,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.pos.as_ref().to_string()),
             )
-            .description("Window Position: Default Top"),
+            .description("Set the default anchor position on the screen. (Default: Top)"),
             SettingItem::new(
                 "Margin",
                 SettingField::number_input(
@@ -269,7 +264,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.margin),
             )
-            .description("Margin : Min 0, Max 500, Default 20"),
+            .description("Adjust the distance from the screen edge. (Default: 20)"),
             SettingItem::new(
                 "Display Style",
                 SettingField::dropdown(
@@ -296,7 +291,7 @@ impl Fixed {
                 )
                 .default_value(AppConfig::default().fixed.display_style.as_ref().to_string()),
             )
-            .description("Display style: Default Smart\nAlways: Always display on screen.\nSmart: Automatically switch display settings."),
+            .description("Smart (Default): Automatically shows or hides the overlay based on activity.\nAlways: The overlay is always visible."),
             SettingItem::new("Auto Hide", SettingField::render(move |_, _, cx| {
                 let is_enable = AppConfig::global(cx).fixed.auto_hide.enabled;
                 let is_disabled = AppConfig::global(cx).fixed.display_style == DisplayStyle::Always;
@@ -304,7 +299,7 @@ impl Fixed {
                 let border_color = cx.theme().border;
 
                 auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), app_config::WindowRole::Fixed)
-            })).description("For use only when DisplayStyle is set to Smart\nHide automatically after a specified period of time.\nHide Time: Min 0 Default 3"),
+            })).description("Set the time (in seconds) before the window hides automatically. (Default 3)\nNote: This setting only applies when Visibility Mode is set to \"Smart\"."),
 
         ]
     }

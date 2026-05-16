@@ -277,7 +277,7 @@ pub fn apply_config_to_all(
     core.renderer.request_alpha_mode(cfg.transparent);
     core.renderer.update_config(style)?;
     // サイズの再計算とリサイズ
-    let metrics = core.renderer.calc_metrics(state.mode, style.text_style)?;
+    let metrics = core.renderer.calc_metrics(state.mode, style.text_format)?;
     let p = style.padding;
     let p_size = PhysicalSize::new(
         (metrics.width + p * 2.0).ceil(),
@@ -297,7 +297,7 @@ fn handle_redraw_requested(
     displayed: bool,
     mode: InputMode,
 ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
-    let metrics = core.renderer.calc_metrics(mode, style.text_style)?;
+    let metrics = core.renderer.calc_metrics(mode, style.text_format)?;
     let (w, h) = (
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
@@ -373,7 +373,7 @@ fn set_pos_floating(
     pt: POINT,
 ) -> anyhow::Result<()> {
     let o = cfg.floating.offset;
-    let f = cfg.floating.frequency;
+    let smoothness = cfg.floating.smoothness;
     let v_screen = state.v_screen;
 
     core.renderer.mouse_tracking(
@@ -381,7 +381,7 @@ fn set_pos_floating(
         state.floating.y - v_screen.y + o.y,
         pt.x - v_screen.x + o.x,
         pt.y - v_screen.y + o.y,
-        f,
+        smoothness,
     )?;
     Ok(())
 }

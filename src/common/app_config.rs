@@ -22,7 +22,7 @@ pub struct FloatingWindow {
     pub role: WindowRole,
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
-    pub frequency: f32,
+    pub smoothness: f32,
     pub style: WindowStyle,
     pub display_style: DisplayStyle,
     pub auto_hide: AutoHide,
@@ -33,7 +33,7 @@ impl Default for FloatingWindow {
         Self {
             role: WindowRole::default(),
             offset: POINT { x: 20, y: 20 },
-            frequency: 0.05,
+            smoothness: 0.05,
             style: WindowStyle::default(),
             display_style: DisplayStyle::default(),
             auto_hide: AutoHide::default(),
@@ -120,7 +120,7 @@ pub enum WindowPos {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
-pub enum TextStyle {
+pub enum TextFormat {
     Compact,
     #[default]
     Full,
@@ -133,7 +133,7 @@ pub struct WindowStyle {
     pub font_size: f32, // フォントサイズ
     #[serde(with = "D2d1ColorFDef")]
     pub font_color: D2D1_COLOR_F, //
-    pub text_style: TextStyle,
+    pub text_format: TextFormat,
     #[serde(with = "D2d1ColorFDef")]
     pub bg_color: D2D1_COLOR_F, // 背景色
 }
@@ -150,7 +150,7 @@ impl Default for WindowStyle {
                 b: 0.95,
                 a: 1.0,
             },
-            text_style: TextStyle::default(),
+            text_format: TextFormat::default(),
             bg_color: D2D1_COLOR_F { r: 0.2, g: 0.2, b: 0.2, a: 1.0 },
         }
     }

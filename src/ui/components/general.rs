@@ -23,9 +23,9 @@ pub fn general(
                     },
                 ),
             )
-            .description("If this doesn't work in some apps, please enable it."),
+            .description("Enable this to run the application with administrative privileges. If this doesn't work in some apps, please enable it.\nRestart required to apply changes."),
             SettingItem::new(
-                "Start Up",
+                "Launch at Startup",
                 SettingField::checkbox(
                     move |_: &App| cur_start,
                     move |val: bool, cx: &mut App| {
@@ -39,7 +39,7 @@ pub fn general(
                     },
                 ),
             )
-            .description("Run automatically when the PC starts up. Based on current permissions.\nAdministrator: HIGHEST, Standard User: LUA"),
+            .description("Register the application to the Task Scheduler to start automatically. The privilege level (Highest / Standard) will be determined by your current settings.\nRestart required to apply changes."),
             SettingItem::new(
                 "Transparent",
                 SettingField::checkbox(
@@ -52,7 +52,7 @@ pub fn general(
             )
             .description("Enable transparency to smooth out dark edges.\nNote: This will slightly increase system load."),
             SettingItem::new(
-                "Theme Mode",
+                "UI Theme",
                 SettingField::dropdown(
                     vec![
                         (ConfigTheme::System.as_ref().into(), "System".into()),
@@ -72,7 +72,7 @@ pub fn general(
                 )
                 .default_value(AppConfig::default().cfg_theme.as_ref().to_string()),
             )
-            .description("Theme Mode: Default System"),
+            .description("Choose the application's appearance. System (Default), Light, Dark"),
             SettingItem::new(
                 "Window Type",
                 SettingField::dropdown(
@@ -98,6 +98,6 @@ pub fn general(
                 )
                 .default_value(AppConfig::default().active_role.as_ref().to_string()),
             )
-            .description("Window type: Default Fixed"),
+            .description("Fixed (Default): The window stays in a fixed position.\nFloating: The window follows the mouse cursor."),
         ]
 }

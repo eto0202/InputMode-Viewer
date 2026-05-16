@@ -1,4 +1,4 @@
-use crate::ui::prelude::*;
+use crate::{common::app_config::TextFormat, ui::prelude::*};
 
 pub struct Floating {
     pub bg_color: Entity<ColorPickerState>,
@@ -138,7 +138,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.font_size),
             )
-            .description("Font Size: Min 5, Max 100, Default 14"),
+            .description("Adjust the text size between 5 and 100. (Default: 14)"),
             SettingItem::new(
                 "Font Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -148,20 +148,17 @@ impl Floating {
             )
             .description("Font Color: Default #F2F2F2"),
             SettingItem::new(
-                "Text Style",
+                "Text Format",
                 SettingField::dropdown(
                     vec![
-                        (app_config::TextStyle::Full.as_ref().into(), "Full".into()),
-                        (
-                            app_config::TextStyle::Compact.as_ref().into(),
-                            "Compact".into(),
-                        ),
+                        (TextFormat::Full.as_ref().into(), "Full".into()),
+                        (TextFormat::Compact.as_ref().into(),"Compact".into()),
                     ],
                     |cx: &App| {
                         AppConfig::global(cx)
                             .floating
                             .style
-                            .text_style
+                            .text_format
                             .as_ref()
                             .to_string()
                             .into()
@@ -169,15 +166,15 @@ impl Floating {
                     |val: SharedString, cx: &mut App| {
                         let style = val
                             .as_str()
-                            .parse::<app_config::TextStyle>()
-                            .unwrap_or(app_config::TextStyle::Full);
-                        AppConfig::global_mut(cx).floating.style.text_style = style;
+                            .parse::<TextFormat>()
+                            .unwrap_or(TextFormat::Full);
+                        AppConfig::global_mut(cx).floating.style.text_format = style;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
-                .default_value(AppConfig::default().active_role.as_ref().to_string()),
+                .default_value(AppConfig::default().floating.style.text_format.as_ref().to_string()),
             )
-            .description("Text Style: Default Full"),
+            .description("Full (Default): Show all text.\nCompact: Show essential text only."),
             SettingItem::new(
                 "Background Color",
                 SettingField::element(ColorPickerSettingItem::new(
@@ -185,7 +182,7 @@ impl Floating {
                     self.bg_selected_color,
                 )),
             )
-            .description("Background Color: Default #333333"),
+            .description("Set the background color of the overlay. (Default: #333333)"),
             SettingItem::new(
                 "Padding",
                 SettingField::number_input(
@@ -203,7 +200,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.padding),
             )
-            .description("Padding: Min 0, Max 100, Default 5"),
+            .description("Adjust the internal spacing between the text and the window edge. (Default: 5)"),
             SettingItem::new(
                 "Opacity",
                 SettingField::number_input(
@@ -222,7 +219,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.style.opacity * 100.0),
             )
-            .description("Opacity (%): Min 1, Max 100, Default 50\nNote: You must enable \"Transparent\"."),
+            .description("Adjust the window transparency from 1% to 100%. (Default: 50%)"),
             SettingItem::new(
                 "Offset X",
                 SettingField::number_input(
@@ -240,7 +237,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.offset.x),
             )
-            .description("Distance from the mouse X:\nMin -50, Max 50, Default 20"),
+            .description("Horizontal distance from the mouse cursor. (Default: 20)\nPositive values move the window to the right, negative to the left."),
             SettingItem::new(
                 "Offset Y",
                 SettingField::number_input(
@@ -258,9 +255,9 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.offset.y),
             )
-            .description("Distance from the mouse Y:\nMin -50, Max 50, Default 20"),
+            .description("Vertical distance from the mouse cursor. (Default: 20)\nPositive values move the window to the top, negative to the bottom."),
             SettingItem::new(
-                "Tracking Frequency",
+                "Follow Smoothness",
                 SettingField::number_input(
                         NumberFieldOptions {
                             min: 0.01,
@@ -269,24 +266,24 @@ impl Floating {
                             precision: Some(2),
                         },
                     |cx: &App| {
-                        ((AppConfig::global(cx).floating.frequency * 100.0).round() / 100.0)
+                        ((AppConfig::global(cx).floating.smoothness * 100.0).round() / 100.0)
                             .to_string()
                             .parse::<f64>()
-                            .unwrap()
+                            .unwrap_or(0.05)
                     },
                     |val: f64, cx: &mut App| {
-                        AppConfig::global_mut(cx).floating.frequency = val as f32;
+                        AppConfig::global_mut(cx).floating.smoothness = val as f32;
                         let _ = config::save_config(AppConfig::global(cx));
                     },
                 )
                 .default_value(
-                    ((AppConfig::default().floating.frequency * 100.0).round() / 100.0)
+                    ((AppConfig::default().floating.smoothness * 100.0).round() / 100.0)
                         .to_string()
                         .parse::<f64>()
-                        .unwrap()
+                        .unwrap_or(0.05)
                 ),
             )
-            .description("Mouse tracking frequency:\nMin 0.001, Max 0.1, Default 0.05\nThe lower the value, the smoother the tracking."),
+            .description("Lower values result in smoother, more fluid movement. (Default: 0.05)"),
             SettingItem::new(
                 "Display Style",
                 SettingField::dropdown(
@@ -313,7 +310,7 @@ impl Floating {
                 )
                 .default_value(AppConfig::default().floating.display_style.as_ref().to_string()),
             )
-            .description("Display style: Default Smart\nAlways: Always display on screen.\nSmart: Automatically switch display settings."),
+            .description("Smart (Default): Automatically shows or hides the overlay based on activity.\nAlways: The overlay is always visible."),
             SettingItem::new("Auto Hide", SettingField::render(move |_, _, cx| {
                 let is_enable = AppConfig::global(cx).floating.auto_hide.enabled;
                 let is_disabled = AppConfig::global(cx).floating.display_style == DisplayStyle::Always;
@@ -321,7 +318,7 @@ impl Floating {
                 let border_color = cx.theme().border;
 
                 auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), app_config::WindowRole::Floating)
-            })).description("For use only when DisplayStyle is set to Smart\nHide automatically after a specified period of time.\nHide Time: Min 0 Default 3"),
+            })).description("Set the time (in seconds) before the window hides automatically. (Default 3)\nNote: This setting only applies when Visibility Mode is set to \"Smart\"."),
         ]
     }
 }

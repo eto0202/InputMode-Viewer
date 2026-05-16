@@ -56,7 +56,7 @@ impl AppCore {
         role: WindowRole,
     ) -> anyhow::Result<PhysicalSize<f32>> {
         let style = AppCore::get_style(cfg, role)?;
-        let metrics = renderer.calc_metrics(mode, style.text_style)?;
+        let metrics = renderer.calc_metrics(mode, style.text_format)?;
 
         let p = style.padding;
         let final_size = PhysicalSize::new(
