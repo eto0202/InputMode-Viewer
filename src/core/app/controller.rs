@@ -127,44 +127,50 @@ impl Controller {
     }
 
     fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
+        el.set_control_flow(ControlFlow::Wait);
+
         let last_update_inst = self.state.last_update_inst;
         let now = Instant::now();
         let elapsed = now.duration_since(last_update_inst);
 
-        if elapsed >= FRAME_DURATION {
-            wait_tray_event(el); // タスクトレイイベント
+        let core = self.core.as_ref().context("AppCore Missing")?;
+        let cfg = core.cfg.load();
 
-            let core = self.core.as_ref().context("AppCore Missing")?;
-            let cfg = core.cfg.load();
-            let is_always = match cfg.active_role {
-                WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
-                WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
-            };
-
-            if !self.state.displayed && !is_always {
-                return Ok(());
+        if elapsed < FRAME_DURATION {
+            if cfg.active_role == WindowRole::Floating {
+                el.set_control_flow(ControlFlow::WaitUntil(now + FRAME_DURATION));
             }
-
-            let mut pt = POINT::default();
-            unsafe { GetCursorPos(&mut pt) }?;
-
-            match cfg.active_role {
-                WindowRole::Floating => {
-                    set_pos_floating(core, cfg, &self.state, pt)?;
-                    self.state.floating = pt; // 現在のマウス座標を保存
-                }
-                WindowRole::Fixed => {
-                    let pos = set_pos_fixed(core, cfg, &self.state, pt)?;
-                    self.state.fixed = pos;
-                }
-            }
-            core.mw.window.request_redraw();
-
-            self.state.last_update_inst = now;
-            el.set_control_flow(ControlFlow::WaitUntil(now + FRAME_DURATION));
-        } else {
-            el.set_control_flow(ControlFlow::WaitUntil(last_update_inst + FRAME_DURATION));
+            return Ok(());
         }
+
+        self.state.last_update_inst = now;
+
+        wait_tray_event(el); // タスクトレイイベント
+
+        let is_always = match cfg.active_role {
+            WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
+            WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
+        };
+
+        if !self.state.displayed && !is_always {
+            core.renderer.set_opacity(0.0)?;
+            return Ok(());
+        }
+
+        let mut pt = POINT::default();
+        unsafe { GetCursorPos(&mut pt) }?;
+
+        match cfg.active_role {
+            WindowRole::Floating => {
+                set_pos_floating(core, &self.state, pt)?;
+                self.state.floating = pt; // 現在のマウス座標を保存
+            }
+            WindowRole::Fixed => {
+                let pos = set_pos_fixed(core, &self.state, pt)?;
+                self.state.fixed = pos;
+            }
+        }
+        core.mw.window.request_redraw();
 
         Ok(())
     }
@@ -338,55 +344,52 @@ fn handle_redraw_requested(
     // is_always: 常に表示設定か
     // auto_hide_enabled: 自動非表示が設定でONか
     let should_show = displayed || is_always;
+    if !should_show {
+        core.renderer.set_opacity(0.0)?;
+        return Ok(metrics);
+    }
     let action = state
         .show_state
         .update(should_show, state.refresh_requested);
     state.refresh_requested = false;
 
-    if should_show {
-        let scale = core.mw.window.scale_factor();
-        core.renderer
-            .draw(mode, &style, w, h, scale, cfg.transparent)?;
+    let scale = core.mw.window.scale_factor();
+    core.renderer
+        .draw(mode, &style, w, h, scale, cfg.transparent)?;
 
-        if is_always {
-            core.renderer.set_opacity(style.opacity)?;
-        } else {
-            match action {
-                AnimationAction::StartFadeIn => {
-                    if auto_hide_enabled {
-                        core.renderer
-                            .auto_hide(style.opacity, auto_hide_time, false)?;
-                    } else {
-                        core.renderer.fade_in(style.opacity)?;
-                    }
+    if is_always {
+        core.renderer.set_opacity(style.opacity)?;
+    } else {
+        match action {
+            AnimationAction::StartFadeIn => {
+                if auto_hide_enabled {
+                    core.renderer
+                        .auto_hide(style.opacity, auto_hide_time, false)?;
+                } else {
+                    core.renderer.fade_in(style.opacity)?;
                 }
-                AnimationAction::Refresh => {
-                    if auto_hide_enabled {
-                        core.renderer
-                            .auto_hide(style.opacity, auto_hide_time, true)?;
-                    } else {
-                        // 常に表示モードなら、Refreshが来ても何もしない
-                    }
+            }
+            AnimationAction::Refresh => {
+                if auto_hide_enabled {
+                    core.renderer
+                        .auto_hide(style.opacity, auto_hide_time, true)?;
+                } else {
+                    // 常に表示モードならRefreshが来ても何もしない
                 }
-                _ => {
-                    if !auto_hide_enabled {
-                        core.renderer.set_opacity(style.opacity)?;
-                    }
+            }
+            _ => {
+                if !auto_hide_enabled {
+                    core.renderer.set_opacity(style.opacity)?;
                 }
             }
         }
-    } else {
-        core.renderer.set_opacity(0.0)?;
     }
+
     Ok(metrics)
 }
 
-fn set_pos_floating(
-    core: &AppCore,
-    cfg: Guard<Arc<AppConfig>>,
-    state: &AppState,
-    pt: POINT,
-) -> anyhow::Result<()> {
+fn set_pos_floating(core: &AppCore, state: &AppState, pt: POINT) -> anyhow::Result<()> {
+    let cfg = core.cfg.load();
     let o = cfg.floating.offset;
     let smoothness = cfg.floating.smoothness;
     let v_screen = state.v_screen;
@@ -401,12 +404,8 @@ fn set_pos_floating(
     Ok(())
 }
 
-fn set_pos_fixed(
-    core: &AppCore,
-    cfg: Guard<Arc<AppConfig>>,
-    state: &AppState,
-    pt: POINT,
-) -> anyhow::Result<POINT> {
+fn set_pos_fixed(core: &AppCore, state: &AppState, pt: POINT) -> anyhow::Result<POINT> {
+    let cfg = core.cfg.load();
     let (info, s) = calc::monitor_info(pt)?;
     let pos = calc::fixed_position(
         state.metrics,

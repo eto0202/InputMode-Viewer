@@ -50,7 +50,7 @@ pub fn general(
                     },
                 ).default_value(AppConfig::default().transparent),
             )
-            .description("Enable transparency to smooth out dark edges.\nNote: This will slightly increase system load."),
+            .description("Enable transparency to smooth out dark edges."),
             SettingItem::new(
                 "UI Theme",
                 SettingField::dropdown(

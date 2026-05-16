@@ -389,15 +389,7 @@ impl DCompRenderer {
     // 即座に opacity を 0 にするというアニメーションを行う
     pub fn set_opacity(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
-            let animation = self.dcomp_device.CreateAnimation()?;
-
-            animation.AddCubic(0.0, opacity, 0.0, 0.0, 0.0)?;
-
-            // 以前のアニメーションのタイムラインが即座にこの値で上書きされる
-            animation.End(0.0, opacity)?;
-
-            // SetOpacity2 ではなく、アニメーション用の SetOpacity を使用
-            self.dcomp_effect_group.SetOpacity(&animation)?;
+            self.dcomp_effect_group.SetOpacity2(opacity)?;
             self.dcomp_device.Commit()?;
         }
         Ok(())
