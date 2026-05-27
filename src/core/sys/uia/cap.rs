@@ -44,7 +44,7 @@ pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_cap_monitor(&proxy, &rx) {
             log::warn!("Cap Monitor Error: {:?}. Restarting...", e);
-            thread::sleep(std::time::Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(3));
         }
     });
 }
@@ -68,14 +68,25 @@ fn run_cap_monitor(
                     continue;
                 }
                 log::debug!("cap_thread: Event Received");
-                // 入力可能性を取得
-                let cur_cap = input_capability(&uia, &cache_req)?;
-                // 前回と違う場合のみ通知
-                if cap != cur_cap {
-                    proxy.send_event(Message::Cap(cur_cap))?;
-                }
+                // 遅延対策
+                for i in 0..3 {
+                    // 入力可能性を取得
+                    let cur_cap = input_capability(&uia, &cache_req)?;
 
-                cap = cur_cap;
+                    // 前回と違う場合のみ通知
+                    if cap != cur_cap {
+                        proxy.send_event(Message::Cap(cur_cap))?;
+                        cap = cur_cap;
+                        break;
+                    }
+
+                    // 3回目の試行なら、同じ値でもキー入力があった事実として送る
+                    if i == 2 {
+                        proxy.send_event(Message::Cap(cur_cap))?;
+                    }
+
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
                 processed = std::time::Instant::now();
             }
         }

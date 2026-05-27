@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub startup: bool, // タスクスケジューラへの登録(管理者権限の要求)
     pub administrator: bool,
     pub transparent: bool, // 透過
+    pub quality: RenderingQuality,
     pub cfg_theme: ConfigTheme,
     pub floating: FloatingWindow, // マウス追従ウィンドウ
     pub fixed: FixedWindow,       // 固定ウィンドウ
@@ -22,7 +23,6 @@ pub struct FloatingWindow {
     pub role: WindowRole,
     #[serde(with = "PointDef")]
     pub offset: POINT, // マウスからどれくらい離すか
-    pub smoothness: f32,
     pub style: WindowStyle,
     pub display_style: DisplayStyle,
     pub auto_hide: AutoHide,
@@ -31,9 +31,8 @@ pub struct FloatingWindow {
 impl Default for FloatingWindow {
     fn default() -> Self {
         Self {
-            role: WindowRole::default(),
+            role: WindowRole::Floating,
             offset: POINT { x: 20, y: 20 },
-            smoothness: 0.05,
             style: WindowStyle::default(),
             display_style: DisplayStyle::default(),
             auto_hide: AutoHide::default(),
@@ -54,7 +53,7 @@ pub struct FixedWindow {
 impl Default for FixedWindow {
     fn default() -> Self {
         Self {
-            role: WindowRole::default(),
+            role: WindowRole::Fixed,
             pos: WindowPos::default(),
             margin: 20,
             style: WindowStyle::default(),
@@ -105,7 +104,7 @@ struct D2d1ColorFDef {
     a: f32,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, AsRefStr, EnumString)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, AsRefStr, EnumString)]
 pub enum WindowPos {
     #[default]
     Top,
@@ -288,4 +287,15 @@ impl ProcessConfig {
             PolicyMode::WhiteList => self.whitelist.contains(proc_name),
         }
     }
+}
+
+#[derive(
+    Debug, Default, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, AsRefStr, EnumString,
+)]
+pub enum RenderingQuality {
+    Performance,
+    #[default]
+    Balanced,
+    HighQuality,
+    Ultra,
 }

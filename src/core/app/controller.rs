@@ -1,10 +1,16 @@
-use crate::{
-    common::app_config::{DisplayStyle, PolicyMode},
-    core::app::prelude::*,
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
 };
 
-const TARGET_FPS: u64 = 240;
-const FRAME_DURATION: Duration = Duration::from_nanos(1_000_000_000 / TARGET_FPS);
+use parking_lot::Mutex;
+
+use crate::{
+    common::app_config::{DisplayStyle, PolicyMode, RenderingQuality},
+    core::app::{
+        mouse_tracking::{ControlMessage, PositionController, spawn_position_thread},
+        prelude::*,
+    },
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
@@ -13,44 +19,58 @@ pub enum Message {
     ConfigUpdated,        // 設定更新
 }
 
-pub struct Controller {
-    pub state: AppState,
-    pub core: Option<AppCore>,
-    pub cfg: Option<Arc<ArcSwap<AppConfig>>>, // アプリ設定
-}
-
 pub struct AppState {
+    pub shared: Arc<SharedState>,
     pub cap: InputCapability,
     pub mode: InputMode,
-    pub displayed: bool,
-    pub refresh_requested: bool,
+    pub currently_visible: bool,
     pub show_state: ShowState,
-    pub v_screen: VirtualScreen,
-    pub floating: POINT,
-    pub fixed: POINT,
-    pub metrics: DWRITE_TEXT_METRICS,
-    pub last_update_inst: Instant,
+    pub refresh_requested: bool,
+}
+
+pub struct SharedState {
+    pub displayed: AtomicBool,
+    pub floating: Mutex<POINT>,
+    pub fixed: Mutex<POINT>,
+    pub v_screen: ArcSwap<VirtualScreen>,
+    pub metrics: ArcSwap<DWRITE_TEXT_METRICS>,
+}
+
+impl AppState {
+    pub fn new_shared() -> Arc<SharedState> {
+        Arc::new(SharedState {
+            displayed: AtomicBool::new(false),
+            floating: Mutex::new(POINT::default()),
+            fixed: Mutex::new(POINT::default()),
+            v_screen: ArcSwap::from_pointee(VirtualScreen::default()),
+            metrics: ArcSwap::from_pointee(DWRITE_TEXT_METRICS::default()),
+        })
+    }
 }
 
 impl Default for Controller {
     fn default() -> Self {
         Self {
             state: AppState {
+                shared: AppState::new_shared(),
                 cap: InputCapability::default(),
                 mode: InputMode::default(),
-                displayed: false,
-                refresh_requested: false,
+                currently_visible: false,
                 show_state: ShowState::Hidden,
-                v_screen: VirtualScreen::default(),
-                floating: POINT::default(),
-                fixed: POINT::default(),
-                metrics: DWRITE_TEXT_METRICS::default(),
-                last_update_inst: Instant::now(),
+                refresh_requested: false,
             },
             core: None,
             cfg: None,
+            position_thread_tx: None,
         }
     }
+}
+
+pub struct Controller {
+    pub state: AppState,
+    pub core: Option<AppCore>,
+    pub cfg: Option<Arc<ArcSwap<AppConfig>>>, // アプリ設定
+    pub position_thread_tx: Option<PositionController>,
 }
 
 impl ApplicationHandler<Message> for Controller {
@@ -89,34 +109,40 @@ impl Controller {
             return Ok(());
         }
 
-        self.state.v_screen = VirtualScreen::new();
+        self.state
+            .shared
+            .v_screen
+            .store(Arc::new(VirtualScreen::new()));
 
         let cfg = self.cfg.as_ref().context("AppCore missing")?;
-        let core = AppCore::new(el, cfg.clone(), self.state.mode, self.state.v_screen)?;
+        let v_screen = self.state.shared.v_screen.load();
+        let core = AppCore::new(el, cfg.clone(), self.state.mode, v_screen)?;
         log::info!("AppCore initialized");
 
-        // ウィンドウを描画
-        core.renderer.set_opacity(0.0)?;
-        core.mw.window.request_redraw();
+        // マウス監視スレッドの起動
+        if self.position_thread_tx.is_none() {
+            let pos_ctrl = spawn_position_thread(&core, &self.state).expect("Failed to spawn thread");
+
+            self.position_thread_tx = Some(pos_ctrl);
+            log::info!("Position tracking thread spawned.");
+        }
 
         self.core = Some(core);
+
+        // 初回ウィンドウを描画
+        self.redraw_requested().unwrap();
+        log::info!("First redraw requested");
 
         Ok(())
     }
 
     fn handle_window_event(&mut self, el: &ActiveEventLoop, e: WindowEvent) -> anyhow::Result<()> {
         match e {
-            WindowEvent::RedrawRequested => {
-                let core = self.core.as_mut().context("AppCore missing")?;
-                let displayed = self.state.displayed;
-                let mode = self.state.mode;
-                let style = AppCore::get_style(&core.cfg, core.mw.role)?;
-                let metrics =
-                    handle_redraw_requested(core, &mut self.state, style, displayed, mode)?;
-                self.state.metrics = metrics;
-            }
             WindowEvent::ScaleFactorChanged { .. } => {
-                self.state.v_screen = VirtualScreen::new();
+                self.state
+                    .shared
+                    .v_screen
+                    .store(Arc::new(VirtualScreen::new()));
             }
             WindowEvent::CloseRequested => {
                 el.exit();
@@ -126,88 +152,166 @@ impl Controller {
         Ok(())
     }
 
+    fn redraw_requested(&mut self) -> anyhow::Result<()> {
+        let core = self.core.as_mut().context("AppCore Missing")?;
+        let mode = self.state.mode;
+        let metrics = handle_redraw_requested(core, &self.state, mode)?;
+        self.state.shared.metrics.store(Arc::new(metrics));
+        Ok(())
+    }
+
     fn handle_about_to_wait(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
         el.set_control_flow(ControlFlow::Wait);
-
-        let last_update_inst = self.state.last_update_inst;
-        let now = Instant::now();
-        let elapsed = now.duration_since(last_update_inst);
-
-        let core = self.core.as_ref().context("AppCore Missing")?;
-        let cfg = core.cfg.load();
-
-        if elapsed < FRAME_DURATION {
-            if cfg.active_role == WindowRole::Floating {
-                el.set_control_flow(ControlFlow::WaitUntil(now + FRAME_DURATION));
-            }
-            return Ok(());
-        }
-
-        self.state.last_update_inst = now;
-
         wait_tray_event(el); // タスクトレイイベント
-
-        let is_always = match cfg.active_role {
-            WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
-            WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
-        };
-
-        if !self.state.displayed && !is_always {
-            core.renderer.set_opacity(0.0)?;
-            return Ok(());
-        }
-
-        let mut pt = POINT::default();
-        unsafe { GetCursorPos(&mut pt) }?;
-
-        match cfg.active_role {
-            WindowRole::Floating => {
-                set_pos_floating(core, &self.state, pt)?;
-                self.state.floating = pt; // 現在のマウス座標を保存
-            }
-            WindowRole::Fixed => {
-                let pos = set_pos_fixed(core, &self.state, pt)?;
-                self.state.fixed = pos;
-            }
-        }
-        core.mw.window.request_redraw();
-
         Ok(())
     }
 
     fn handle_user_event(&mut self, msg: Message) -> anyhow::Result<()> {
+        let core = self.core.as_mut().context("AppCore Missing")?;
         match msg {
             Message::Cap(cap) => {
+                if self.state.cap != cap {
+                    self.state.refresh_requested = true;
+                }
                 self.state.cap = cap;
             }
             Message::Mode(mode) => {
-                // モードが変化した時に、ウィンドウサイズを再計算してリサイズ要求
-                let core = self.core.as_ref().context("AppCore Missing")?;
+                // モードが変化した時に、ウィンドウサイズを再計算
                 if self.state.mode != mode {
                     resize_request(mode, core)?;
-                    self.state.refresh_requested = true; // リフレッシュ要求
-                }
-                self.state.mode = mode;
-                let old_displayed = self.state.displayed;
-                self.state.displayed = check_displayed(&self.state, core)?;
-
-                // 非表示から表示に変更する場合（新規フェードイン）
-                if !old_displayed && self.state.displayed {
                     self.state.refresh_requested = true;
                 }
+                self.state.mode = mode;
+                let old_displayed = self.state.shared.displayed.load(Ordering::Relaxed);
+                self.state
+                    .shared
+                    .displayed
+                    .store(check_displayed(&self.state, core)?, Ordering::Relaxed);
+
+                if self.state.shared.displayed.load(Ordering::Relaxed) {
+                    let tx = self
+                        .position_thread_tx
+                        .as_ref()
+                        .context("Missing Position thread")?;
+                    if let Err(e) = tx.send(ControlMessage::Refresh) {
+                        log::error!("Failed to send Refresh: {:?}", e);
+                    }
+                }
+
+                if old_displayed != self.state.shared.displayed.load(Ordering::Relaxed) {
+                    self.state.refresh_requested = true;
+                }
+
+                trigger_display(&mut self.state, core, true)?;
+                self.redraw_requested()?;
             }
             Message::ConfigUpdated => {
-                let core = self.core.as_mut().context("AppCore Missing")?;
+                let old_role = core.cfg.load().active_role;
                 let new_cfg = config::load_config();
                 config_update(self.cfg.clone(), &new_cfg, core, &self.state)?;
+
+                let new_role = core.cfg.load().active_role;
+                if (old_role != new_role) && new_role == WindowRole::Floating {
+                    let tx = self
+                        .position_thread_tx
+                        .as_ref()
+                        .context("Missing Position thread")?;
+                    if let Err(e) = tx.send(ControlMessage::ResetPosition) {
+                        log::error!("Failed to send ResetPosition: {:?}", e);
+                    }
+                }
             }
         }
         Ok(())
     }
 }
 
+pub fn trigger_display(
+    state: &mut AppState,
+    core: &AppCore,
+    force_fade_in: bool,
+) -> anyhow::Result<()> {
+    let displayed = state.shared.displayed.load(Ordering::Relaxed);
+
+    let update = state.show_state.update(displayed);
+    let result_fade_in = update || force_fade_in;
+
+    let rendering_quality = core.cfg.load().quality;
+
+    match rendering_quality {
+        RenderingQuality::Performance => no_animation(state, core, displayed, result_fade_in)?,
+        _ => with_animation(state, core, displayed, result_fade_in)?,
+    }
+
+    Ok(())
+}
+
+pub fn with_animation(
+    state: &mut AppState,
+    core: &AppCore,
+    displayed: bool,
+    result_fade_in: bool,
+) -> anyhow::Result<()> {
+    let style = AppCore::get_style(&core.cfg, core.mw.role)?;
+    let opacity = style.opacity;
+    let (auto_hide_enabled, auto_hide_time) = set_auto_hide(core)?;
+
+    if auto_hide_enabled {
+        if displayed && state.refresh_requested {
+            if result_fade_in {
+                core.renderer.auto_hide(opacity, auto_hide_time, false)?;
+                state.refresh_requested = false;
+            } else {
+                core.renderer.auto_hide(opacity, auto_hide_time, true)?;
+                state.refresh_requested = false;
+            }
+        } else if !state.refresh_requested {
+            core.renderer.set_opacity(0.0)?;
+        } else {
+            core.renderer.fade_out()?;
+        }
+    } else if displayed {
+        if result_fade_in {
+            core.renderer.fade_in(opacity)?;
+        }
+    } else {
+        core.renderer.fade_out()?;
+    }
+    Ok(())
+}
+
+pub fn no_animation(
+    state: &mut AppState,
+    core: &AppCore,
+    displayed: bool,
+    result_fade_in: bool,
+) -> anyhow::Result<()> {
+    let style = AppCore::get_style(&core.cfg, core.mw.role)?;
+    let opacity = style.opacity;
+    let (auto_hide_enabled, auto_hide_time) = set_auto_hide(core)?;
+
+    if auto_hide_enabled {
+        if displayed && state.refresh_requested {
+            if result_fade_in {
+                core.renderer
+                    .auto_hide_no_animaition(opacity, auto_hide_time)?;
+                state.refresh_requested = false;
+            }
+        } else if !state.refresh_requested {
+            core.renderer.set_opacity(0.0)?;
+        }
+    } else if displayed {
+        if result_fade_in {
+            core.renderer.set_opacity(opacity)?;
+        }
+    } else {
+        core.renderer.set_opacity(0.0)?;
+    }
+    Ok(())
+}
+
 fn check_displayed(state: &AppState, core: &AppCore) -> anyhow::Result<bool> {
-    let cfg = core.cfg.load().process_cfg.clone();
+    let cfg = core.cfg.load();
 
     let displayed = match state.cap {
         InputCapability::No => false,
@@ -215,10 +319,18 @@ fn check_displayed(state: &AppState, core: &AppCore) -> anyhow::Result<bool> {
         InputCapability::Unknown => state.mode.is_on(), // 不明の場合はONの時だけ表示
     };
 
+    let is_always = match cfg.active_role {
+        WindowRole::Fixed => cfg.fixed.display_style == DisplayStyle::Always,
+        WindowRole::Floating => cfg.floating.display_style == DisplayStyle::Always,
+    };
+
+    let displayed = displayed || is_always;
+
     // 失敗した場合は表示する
-    let result = match cfg.mode {
+    let process = cfg.process_cfg.clone();
+    let result = match process.mode {
         PolicyMode::BlackList => {
-            if !utils::included_in_running_process(&utils::vec_to_set(cfg.blacklist.processes))
+            if !utils::included_in_running_process(&utils::vec_to_set(process.blacklist.processes))
                 .unwrap_or(false)
             {
                 displayed
@@ -227,7 +339,7 @@ fn check_displayed(state: &AppState, core: &AppCore) -> anyhow::Result<bool> {
             }
         }
         PolicyMode::WhiteList => {
-            if utils::included_in_running_process(&utils::vec_to_set(cfg.whitelist.processes))
+            if utils::included_in_running_process(&utils::vec_to_set(process.whitelist.processes))
                 .unwrap_or(true)
             {
                 displayed
@@ -243,10 +355,9 @@ fn check_displayed(state: &AppState, core: &AppCore) -> anyhow::Result<bool> {
 // ウィンドウサイズを再計算してリサイズ要求
 fn resize_request(mode: InputMode, core: &AppCore) -> anyhow::Result<()> {
     let new_size = AppCore::try_resize(&core.cfg, &core.renderer, mode, core.mw.role)?;
+    let scale = core.mw.window.scale_factor();
     core.renderer
-        .resize(new_size.width as u32, new_size.height as u32)?;
-    core.mw.window.request_redraw();
-
+        .resize(new_size.width as u32, new_size.height as u32, scale)?;
     Ok(())
 }
 
@@ -294,9 +405,12 @@ pub fn apply_config_to_all(
         WindowRole::Fixed => &cfg.fixed.style,
     };
 
+    let scale = core.mw.window.scale_factor();
+
     // Rendererのリソース（色、フォント）を更新
     core.renderer.request_alpha_mode(cfg.transparent);
-    core.renderer.update_config(style)?;
+    core.renderer
+        .update_config(style, cfg.transparent, state.mode, scale)?;
     // サイズの再計算とリサイズ
     let metrics = core.renderer.calc_metrics(state.mode, style.text_format)?;
     let p = style.padding;
@@ -304,125 +418,59 @@ pub fn apply_config_to_all(
         (metrics.width + p * 2.0).ceil(),
         (metrics.height + p * 2.0).ceil(),
     );
+
     core.renderer
-        .resize(p_size.width as u32, p_size.height as u32)?;
-    core.mw.window.request_redraw();
+        .resize(p_size.width as u32, p_size.height as u32, scale)?;
+
+    // テキスト更新
+    let (w, h) = (
+        metrics.width + style.padding * 2.0,
+        metrics.height + style.padding * 2.0,
+    );
+    core.renderer
+        .draw(state.mode, style, w, h, scale, cfg.transparent)?;
 
     Ok(())
 }
 
 fn handle_redraw_requested(
     core: &mut AppCore,
-    state: &mut AppState,
-    style: WindowStyle,
-    displayed: bool,
+    state: &AppState,
     mode: InputMode,
 ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
+    let style = AppCore::get_style(&core.cfg, core.mw.role)?;
     let metrics = core.renderer.calc_metrics(mode, style.text_format)?;
     let (w, h) = (
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
     );
+    let displayed = state.shared.displayed.load(Ordering::Relaxed);
 
-    let cfg = core.cfg.load();
-    let (is_always, auto_hide_enabled, auto_hide_time) = match cfg.active_role {
-        WindowRole::Fixed => {
-            let is_always = cfg.fixed.display_style == DisplayStyle::Always;
-            let auto_hide_enable = cfg.fixed.auto_hide.enabled;
-            let auto_hide_time = cfg.fixed.auto_hide.time;
-            (is_always, auto_hide_enable, auto_hide_time)
-        }
-        WindowRole::Floating => {
-            let is_always = cfg.floating.display_style == DisplayStyle::Always;
-            let auto_hide_enable = cfg.floating.auto_hide.enabled;
-            let auto_hide_time = cfg.floating.auto_hide.time;
-            (is_always, auto_hide_enable, auto_hide_time)
-        }
-    };
+    if displayed {
+        let scale = core.mw.window.scale_factor();
+        let cfg = core.cfg.load();
 
-    // displayed: 今表示すべきかどうか
-    // is_always: 常に表示設定か
-    // auto_hide_enabled: 自動非表示が設定でONか
-    let should_show = displayed || is_always;
-    if !should_show {
-        core.renderer.set_opacity(0.0)?;
-        return Ok(metrics);
+        core.renderer
+            .draw(mode, &style, w, h, scale, cfg.transparent)?;
     }
-    let action = state
-        .show_state
-        .update(should_show, state.refresh_requested);
-    state.refresh_requested = false;
-
-    let scale = core.mw.window.scale_factor();
-    core.renderer
-        .draw(mode, &style, w, h, scale, cfg.transparent)?;
-
-    if is_always {
-        core.renderer.set_opacity(style.opacity)?;
-    } else {
-        match action {
-            AnimationAction::StartFadeIn => {
-                if auto_hide_enabled {
-                    core.renderer
-                        .auto_hide(style.opacity, auto_hide_time, false)?;
-                } else {
-                    core.renderer.fade_in(style.opacity)?;
-                }
-            }
-            AnimationAction::Refresh => {
-                if auto_hide_enabled {
-                    core.renderer
-                        .auto_hide(style.opacity, auto_hide_time, true)?;
-                } else {
-                    // 常に表示モードならRefreshが来ても何もしない
-                }
-            }
-            _ => {
-                if !auto_hide_enabled {
-                    core.renderer.set_opacity(style.opacity)?;
-                }
-            }
-        }
-    }
-
     Ok(metrics)
 }
 
-fn set_pos_floating(core: &AppCore, state: &AppState, pt: POINT) -> anyhow::Result<()> {
+pub fn set_auto_hide(core: &AppCore) -> anyhow::Result<(bool, f32)> {
     let cfg = core.cfg.load();
-    let o = cfg.floating.offset;
-    let smoothness = cfg.floating.smoothness;
-    let v_screen = state.v_screen;
-
-    core.renderer.mouse_tracking(
-        state.floating.x - v_screen.x + o.x,
-        state.floating.y - v_screen.y + o.y,
-        pt.x - v_screen.x + o.x,
-        pt.y - v_screen.y + o.y,
-        smoothness,
-    )?;
-    Ok(())
-}
-
-fn set_pos_fixed(core: &AppCore, state: &AppState, pt: POINT) -> anyhow::Result<POINT> {
-    let cfg = core.cfg.load();
-    let (info, s) = calc::monitor_info(pt)?;
-    let pos = calc::fixed_position(
-        state.metrics,
-        &cfg.fixed.pos,
-        cfg.fixed.margin,
-        cfg.fixed.style.padding,
-        info,
-        s,
-    )?;
-    // DComp の SetOffset はウィンドウの左上を基準とした相対座標で計算
-    // 画面全体を透明なウィンドウで覆っているため、- 仮想スクリーンのx,y軸
-    core.renderer.set_position(
-        (pos.x - state.v_screen.x) as f32,
-        (pos.y - state.v_screen.y) as f32,
-    )?;
-
-    Ok(pos)
+    let (auto_hide_enabled, auto_hide_time) = match cfg.active_role {
+        WindowRole::Fixed => {
+            let auto_hide_enable = cfg.fixed.auto_hide.enabled;
+            let auto_hide_time = cfg.fixed.auto_hide.time;
+            (auto_hide_enable, auto_hide_time)
+        }
+        WindowRole::Floating => {
+            let auto_hide_enable = cfg.floating.auto_hide.enabled;
+            let auto_hide_time = cfg.floating.auto_hide.time;
+            (auto_hide_enable, auto_hide_time)
+        }
+    };
+    Ok((auto_hide_enabled, auto_hide_time))
 }
 
 fn wait_tray_event(el: &ActiveEventLoop) {

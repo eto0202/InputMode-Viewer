@@ -1,4 +1,4 @@
-use crate::ui::prelude::*;
+use crate::{common::app_config::RenderingQuality, ui::prelude::*};
 
 pub fn general(
     _: &mut Window,
@@ -52,6 +52,28 @@ pub fn general(
             )
             .description("Enable transparency to smooth out dark edges."),
             SettingItem::new(
+                "Rendering Quality",
+                SettingField::dropdown(
+                    vec![
+                        (RenderingQuality::Performance.as_ref().into(), "Performance".into()),
+                        (RenderingQuality::Balanced.as_ref().into(), "Balanced".into()),
+                        (RenderingQuality::HighQuality.as_ref().into(), "HighQuality".into()),
+                        (RenderingQuality::Ultra.as_ref().into(), "Ultra".into()),
+                    ],
+                    |cx: &App| AppConfig::global(cx).quality.as_ref().to_string().into(),
+                    |val: SharedString, cx: &mut App| {
+                        let q = val
+                            .as_str()
+                            .parse::<RenderingQuality>()
+                            .unwrap_or(RenderingQuality::Balanced);
+                        AppConfig::global_mut(cx).quality = q;
+                        let _ = config::save_config(AppConfig::global(cx));
+                    },
+                )
+                .default_value(AppConfig::default().quality.as_ref().to_string()),
+            )
+            .description("Performance: Reduces resource usage by limiting animations.\nBalanced (Default): Uses standard animations to balance resource usage and visual experience.\nHighQuality: Maximizes animation fluidity for a smooth visual experience.\nUltra: Maximizes tracking speed for next-gen high-refresh-rate displays."),
+            SettingItem::new(
                 "UI Theme",
                 SettingField::dropdown(
                     vec![
@@ -88,10 +110,12 @@ pub fn general(
                             .into()
                     },
                     |val: SharedString, cx: &mut App| {
+                        log::debug!("Current val: {:?}", val);
                         let role = val
                             .as_str()
                             .parse::<WindowRole>()
                             .unwrap_or(WindowRole::Fixed);
+                        log::debug!("Current Role: {:?}", role);
                         AppConfig::global_mut(cx).active_role = role;
                         let _ = config::save_config(AppConfig::global(cx));
                     },

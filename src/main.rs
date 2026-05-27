@@ -1,8 +1,14 @@
 #![windows_subsystem = "windows"]
-use input_mode_viewer::{core::utils, run::app_run};
-use windows::Win32::UI::{
-    HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
-    WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
+use input_mode_viewer::{
+    core::{sys::new_renderer::init_dispatcher_queue, utils},
+    run::app_run,
+};
+use windows::Win32::{
+    System::WinRT::{RO_INIT_SINGLETHREADED, RoInitialize},
+    UI::{
+        HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
+        WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
+    },
 };
 use windows_core::{HSTRING, w};
 
@@ -10,26 +16,27 @@ use windows_core::{HSTRING, w};
 // デバック画面を実装し、未設定のグリフ、ログファイルを表示
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
-// フェードアウト
 // Compactモード時に余白が大きすぎる問題と画面からはみ出る問題
 // 表示時にタスクバーの反応が悪い？
 // 最前面に不具合
 // モニターサイズからトレイメニュー付近を指定
 // 最終位置を記憶
-// コミット間隔をフレームレートに合わせて負荷を軽減
-// フェードインが動作していないっぽい
-// 品質モードを実装し、負荷をユーザーが選択できるように
+// positon_threadがエラー落ちした時、core.renderer.get_controller() から作り直した新しいコントローラーを渡す
 
 fn main() -> anyhow::Result<()> {
-    unsafe {
-        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-
     utils::init_logger()?;
     log::info!("Logger initialized successful");
 
     set_panic_hook();
     log::info!("Set panic hook successful");
+
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        // COMの初期化 (WinRT用)
+        RoInitialize(RO_INIT_SINGLETHREADED)?;
+    }
+    // DispatcherQueueの初期化
+    let _queue_controller = init_dispatcher_queue()?;
 
     if let Err(e) = app_run() {
         let error_msg = format!("{:?}", e);

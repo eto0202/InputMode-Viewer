@@ -372,13 +372,22 @@ impl DCompRenderer {
             // 描画したバッファを画面に表示
             // matchで、DXGI_STATUS_OCCLUDED（画面が隠れていて描画不要な状態）などの特殊な状況をハンドリングすることも可能
             self.swap_chain.Present(1, DXGI_PRESENT::default()).ok()?;
-            // DirectComposition側に「準備ができたので合成して表示して」と伝える
             self.dcomp_device.Commit()?;
             // ターゲットを外す
             // リソースの参照を解放するためと、次のフレームでの不具合を防ぐため
             self.d2d_context.SetTarget(None);
         };
 
+        Ok(())
+    }
+
+    pub fn set_commit(&self) -> anyhow::Result<()> {
+        unsafe {
+            self.dcomp_device.Commit()?;
+            // ターゲットを外す
+            // リソースの参照を解放するためと、次のフレームでの不具合を防ぐため
+            self.d2d_context.SetTarget(None);
+        }
         Ok(())
     }
 
@@ -389,20 +398,22 @@ impl DCompRenderer {
     // 即座に opacity を 0 にするというアニメーションを行う
     pub fn set_opacity(&self, opacity: f32) -> anyhow::Result<()> {
         unsafe {
-            self.dcomp_effect_group.SetOpacity2(opacity)?;
+            let animation = self.dcomp_device.CreateAnimation()?;
+            animation.AddCubic(0.0, opacity, 0.0, 0.0, 0.0)?;
+            animation.End(0.0, opacity)?;
+            self.dcomp_effect_group.SetOpacity(&animation)?;
             self.dcomp_device.Commit()?;
         }
         Ok(())
     }
 
-    // フェードイン
     pub fn fade_in(&self, opacity: f32) -> anyhow::Result<()> {
         let animation = unsafe { self.dcomp_device.CreateAnimation() }?;
         let duration = 0.16f64;
         let start_value = 0.0f32;
 
         // 1次係数（速度）を計算： (終点 - 始点) / 時間
-        let linear_velocity = (opacity - start_value) / duration as f32;
+        let linear_velocity = opacity / duration as f32;
 
         unsafe {
             // 線形移動の定義
@@ -418,7 +429,19 @@ impl DCompRenderer {
             animation.End(duration, opacity)?;
             // アニメーションを適用
             self.dcomp_effect_group.SetOpacity(&animation)?;
-            self.dcomp_device.Commit()?;
+        }
+        Ok(())
+    }
+
+    pub fn fade_out(&self, opacity: f32) -> anyhow::Result<()> {
+        let animation = unsafe { self.dcomp_device.CreateAnimation() }?;
+        let duration = 0.08f64;
+        let linear_velocity = -opacity / duration as f32;
+
+        unsafe {
+            animation.AddCubic(0.0, opacity, linear_velocity, 0.0, 0.0)?;
+            animation.End(duration, 0.0)?;
+            self.dcomp_effect_group.SetOpacity(&animation)?;
         }
         Ok(())
     }
@@ -472,7 +495,6 @@ impl DCompRenderer {
             )?;
 
             self.dcomp_effect_group.SetOpacity(&animation)?;
-            self.dcomp_device.Commit()?;
         }
         Ok(())
     }

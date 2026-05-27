@@ -257,34 +257,6 @@ impl Floating {
             )
             .description("Vertical distance from the mouse cursor. (Default: 20)\nPositive values move the window to the top, negative to the bottom."),
             SettingItem::new(
-                "Follow Smoothness",
-                SettingField::number_input(
-                        NumberFieldOptions {
-                            min: 0.01,
-                            max: 0.1,
-                            step: 0.01,
-                            precision: Some(2),
-                        },
-                    |cx: &App| {
-                        ((AppConfig::global(cx).floating.smoothness * 100.0).round() / 100.0)
-                            .to_string()
-                            .parse::<f64>()
-                            .unwrap_or(0.05)
-                    },
-                    |val: f64, cx: &mut App| {
-                        AppConfig::global_mut(cx).floating.smoothness = val as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
-                    },
-                )
-                .default_value(
-                    ((AppConfig::default().floating.smoothness * 100.0).round() / 100.0)
-                        .to_string()
-                        .parse::<f64>()
-                        .unwrap_or(0.05)
-                ),
-            )
-            .description("Lower values result in smoother, more fluid movement. (Default: 0.05)"),
-            SettingItem::new(
                 "Display Style",
                 SettingField::dropdown(
                     vec![

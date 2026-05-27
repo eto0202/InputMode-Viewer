@@ -20,7 +20,7 @@ pub fn mode_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>)
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_monitor_loop(&proxy, &rx) {
             log::warn!("IME Monitor Error: {:?}. Restarting...", e);
-            thread::sleep(std::time::Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(3));
         }
     });
 }

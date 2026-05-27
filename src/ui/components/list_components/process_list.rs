@@ -170,7 +170,7 @@ impl ProcessList {
                                             .child(
                                                 resizable_panel()
                                                     .size(px(300.))
-                                                    .size_range(px(150.)..px(800.))
+                                                    .size_range(px(200.)..px(800.))
                                                     .child(
                                                         List::new(&c_state).scrollbar_visible(true),
                                                     ),
@@ -178,7 +178,7 @@ impl ProcessList {
                                             .child(
                                                 resizable_panel()
                                                     .size(px(300.))
-                                                    .size_range(px(150.)..px(800.))
+                                                    .size_range(px(200.)..px(800.))
                                                     .child(
                                                         List::new(&p_state).scrollbar_visible(true),
                                                     ),

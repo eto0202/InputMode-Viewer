@@ -1,7 +1,9 @@
+
+
 use arc_swap::ArcSwap;
 use winit::dpi::PhysicalPosition;
 
-use crate::core::app::{calc::VirtualScreen, prelude::*};
+use crate::core::app::{calc::VirtualScreen,prelude::*};
 
 pub struct AppCore {
     pub cfg: Arc<ArcSwap<AppConfig>>,
@@ -15,10 +17,8 @@ impl AppCore {
         el: &ActiveEventLoop,
         cfg: Arc<ArcSwap<AppConfig>>,
         mode: InputMode,
-        v_screen: VirtualScreen,
+        v_screen: Guard<Arc<VirtualScreen>>,
     ) -> anyhow::Result<Self> {
-        log::info!("Create ProxyWindow successful");
-
         let guard = cfg.load();
         let style = AppCore::get_style(&cfg, guard.active_role)?;
 
@@ -40,6 +40,7 @@ impl AppCore {
         )
         .context("DCompRenderer Initialize Failed")?;
         log::info!("Create DCompRenderer successful");
+
 
         // トレイアイコン
         let tray_icon = tray::tray_icon()?;

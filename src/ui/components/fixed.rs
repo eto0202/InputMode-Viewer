@@ -77,7 +77,7 @@ impl Fixed {
                     NumberInputEvent::Step(step_action) => match step_action {
                         StepAction::Decrement => {
                             this.fixed.number_input_value =
-                                (this.fixed.number_input_value - 1.0).max(0.0);
+                                (this.fixed.number_input_value - 1.0).max(1.0);
 
                             AppConfig::global_mut(cx).fixed.auto_hide.time =
                                 this.fixed.number_input_value;
