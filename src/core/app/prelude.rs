@@ -1,20 +1,20 @@
 pub use crate::{
     common::{
-        app_config::{AppConfig, WindowRole, WindowStyle},
+        app_config::{AppConfig, RenderingQuality, WindowRole, WindowStyle},
         config,
     },
     core::{
         app::{
             app_core::*,
             calc::{self, VirtualScreen},
-            controller::{self, Message},
+            controller::{self, AppState, Message, SharedState},
             prelude::ShowState,
             show_state::*,
             tray,
             window::MainWindow,
         },
         sys::{
-            new_renderer::DCompRenderer,
+            new_renderer::{DCompRenderer, RendererController},
             uia::{cap::InputCapability, text::InputMode},
             win_style,
         },
@@ -28,7 +28,11 @@ pub use arc_swap::{ArcSwap, Guard};
 pub use notify::{Error, Event, EventKind, Watcher};
 pub use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::Ordering,
+        mpsc::{self, Receiver, Sender},
+    },
     time::{Duration, Instant},
 };
 pub use tray_icon::{
@@ -36,17 +40,29 @@ pub use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
 };
 pub use windows::Win32::{
-    Foundation::{HWND, POINT},
+    Foundation::{CloseHandle, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM},
     Graphics::{
         DirectWrite::DWRITE_TEXT_METRICS,
         Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
     },
-    System::Threading::WaitForSingleObject,
+    System::{
+        LibraryLoader::GetModuleHandleW,
+        Threading::{
+            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW,
+            GetCurrentThread, INFINITE, SetEvent, SetThreadPriority, SetWaitableTimer,
+            THREAD_PRIORITY_HIGHEST, TIMER_ALL_ACCESS, WaitForSingleObject,
+        },
+        WinRT::{RO_INIT_MULTITHREADED, RO_INIT_TYPE, RoInitialize, RoUninitialize},
+    },
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        Input::{RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RegisterRawInputDevices},
         WindowsAndMessaging::{
-            GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-            SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos, GetSystemMetrics,
+            HWND_MESSAGE, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
+            PeekMessageW, QS_POSTMESSAGE, QS_RAWINPUT, RegisterClassExW, SM_CXVIRTUALSCREEN,
+            SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WINDOW_EX_STYLE,
+            WINDOW_STYLE, WM_INPUT, WNDCLASSEXW,
         },
     },
 };
@@ -58,3 +74,5 @@ pub use winit::{
     platform::windows::WindowAttributesExtWindows,
     window::{Window, WindowAttributes, WindowId},
 };
+
+pub use windows_core::w;

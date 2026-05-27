@@ -22,6 +22,8 @@ use windows_core::{HSTRING, w};
 // モニターサイズからトレイメニュー付近を指定
 // 最終位置を記憶
 // positon_threadがエラー落ちした時、core.renderer.get_controller() から作り直した新しいコントローラーを渡す
+// メインスレッドも自動復旧するように
+// リスタート時や復旧時に通知を出す
 
 fn main() -> anyhow::Result<()> {
     utils::init_logger()?;

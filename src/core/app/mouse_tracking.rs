@@ -1,30 +1,4 @@
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HINSTANCE, LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::{
-    CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, INFINITE,
-    SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS,
-};
-use windows::Win32::System::WinRT::{
-    RO_INIT_MULTITHREADED, RO_INIT_TYPE, RoInitialize, RoUninitialize,
-};
-use windows::Win32::UI::Input::{
-    RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RegisterRawInputDevices,
-};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, HWND_MESSAGE, MSG, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_POSTMESSAGE, QS_RAWINPUT,
-    RegisterClassExW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_INPUT, WNDCLASSEXW,
-};
-use windows_core::w;
-
-use crate::common::app_config::RenderingQuality;
-use crate::core::app::controller::SharedState;
-use crate::core::app::{controller::AppState, prelude::*};
-use crate::core::sys::new_renderer::RendererController;
-
-use std::sync::atomic::Ordering;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, mpsc};
+use crate::core::app::prelude::*;
 
 // 通知用メッセージ
 pub enum ControlMessage {
@@ -35,15 +9,14 @@ pub enum ControlMessage {
 
 pub struct PositionController {
     tx: Sender<ControlMessage>,
-    wake_event: isize, // HANDLEを整数で持つ
+    wake_event: SendHandle,
 }
 
 impl PositionController {
     pub fn send(&self, msg: ControlMessage) -> anyhow::Result<()> {
         self.tx.send(msg)?;
         unsafe {
-            let h = HANDLE(self.wake_event as *mut _);
-            SetEvent(h)?;
+            SetEvent(self.wake_event.0)?;
         }
         Ok(())
     }
@@ -52,10 +25,17 @@ impl PositionController {
 impl Drop for PositionController {
     fn drop(&mut self) {
         unsafe {
-            let _ = CloseHandle(HANDLE(self.wake_event as *mut _));
+            let _ = CloseHandle(self.wake_event.0);
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)] // メモリレイアウトを元の型と同じにする
+pub struct SendHandle(pub HANDLE);
+// Send と Syncを許可
+unsafe impl Send for SendHandle {}
+unsafe impl Sync for SendHandle {}
 
 pub fn spawn_position_thread(
     core: &AppCore,
@@ -66,13 +46,11 @@ pub fn spawn_position_thread(
     let renderer = core.renderer.get_controller();
 
     // 自動リセットイベント
-    let wake_event_raw = unsafe {
-        let h = CreateEventW(None, false, false, None)?;
-        h.0 as isize // 生のポインタを整数にキャスト
-    };
+    let h = unsafe { CreateEventW(None, false, false, None)? };
+    let wake_event = SendHandle(h);
 
-    // スレッドに渡すために整数値をコピー
-    let thread_wake_event_val = wake_event_raw;
+    // スレッドに渡すためにコピー
+    let thread_wake_event = wake_event;
 
     // メインスレッドからの通知用
     let (tx, rx) = mpsc::channel::<ControlMessage>();
@@ -80,8 +58,15 @@ pub fn spawn_position_thread(
     std::thread::spawn(move || {
         let _guard = RoGuard::new(RO_INIT_MULTITHREADED);
 
-        // スレッド内部で整数をハンドルに戻す
-        let wake_event = HANDLE(thread_wake_event_val as *mut _);
+        // 自スレッドのハンドルを取得し優先度を上げる
+        unsafe {
+            let thread_handle = GetCurrentThread();
+            // THREAD_PRIORITY_HIGHEST: 標準より2段階高い
+            // THREAD_PRIORITY_ABOVE_NORMAL: 標準より1段階高い
+            if let Err(e) = SetThreadPriority(thread_handle, THREAD_PRIORITY_HIGHEST) {
+                log::warn!("Failed to set thread priority: {:?}", e);
+            }
+        }
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_positon_thread(
@@ -89,14 +74,14 @@ pub fn spawn_position_thread(
             cfg.clone(),
             renderer.clone(),
             &rx,
-            wake_event,
+            thread_wake_event,
         ) {
             log::warn!("Position thread Error: {:?}. Restarting...", e);
             std::thread::sleep(Duration::from_secs(3));
         }
     });
 
-    Ok(PositionController { tx, wake_event: wake_event_raw })
+    Ok(PositionController { tx, wake_event })
 }
 
 fn run_positon_thread(
@@ -104,7 +89,7 @@ fn run_positon_thread(
     cfg_swap: Arc<ArcSwap<AppConfig>>,
     renderer: RendererController,
     rx: &Receiver<ControlMessage>,
-    wake_event: HANDLE,
+    wake_event: SendHandle,
 ) -> anyhow::Result<()> {
     const INTERVAL_60HZ: i64 = -166_666; // 100ns単位 (16.6ms)
     const INTERVAL_120HZ: i64 = -83_333;
@@ -117,8 +102,8 @@ fn run_positon_thread(
     let mut last_pt = POINT::default();
 
     // 待ち受けハンドルの配列
-    let handles_idle = [wake_event];
-    let handles_tracking = [wake_event, timer.handle];
+    let handles_idle = [wake_event.0];
+    let handles_tracking = [wake_event.0, timer.handle];
 
     register_rawinput_devices()?;
 
