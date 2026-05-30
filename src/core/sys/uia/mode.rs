@@ -30,11 +30,11 @@ fn run_monitor_loop(
     proxy: &EventLoopProxy<Message>,
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
-    let mut ime = ImeMonitor::new()?;
+    let mut ime: ImeMonitor = ImeMonitor::new()?;
     log::info!("Run ImeMonitor successful");
 
     let mut processed = std::time::Instant::now();
-    let mut mode = InputMode::new();
+    let mut mode: InputMode<'static> = InputMode::new();
 
     loop {
         // イベント受信
@@ -119,7 +119,7 @@ impl ImeMonitor {
         })
     }
 
-    fn fetch_current_mode(&mut self) -> anyhow::Result<InputMode> {
+    fn fetch_current_mode(&mut self) -> anyhow::Result<InputMode<'static>> {
         // 生存確認
         let needs_refresh = self
             .cached
@@ -140,6 +140,6 @@ impl ImeMonitor {
         let el = init::find_element(&els, "InnerTextBlock")?;
         let name = unsafe { el.CachedName() }?;
 
-        Ok(InputMode::from_glyph(&name.to_string()))
+        Ok(InputMode::from_glyph(name.to_string()))
     }
 }

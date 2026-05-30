@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::common::app_config::TextFormat;
 
 // windows 11 のタスクバーで使われているのは Segoe Fluent Icons
@@ -24,10 +26,10 @@ pub const CHINESE_PINYIN: &str = "\u{e98a}";
 pub const JAPANESE: &str = "\u{e985}";
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub enum InputMode {
+pub enum InputMode<'a> {
     #[default]
     Unknown,
-    Layout(String), // キーボードレイアウト
+    Layout(Cow<'a, str>), // キーボードレイアウト
 
     Hiragana,
     FullKatakana,
@@ -48,14 +50,19 @@ pub enum InputMode {
     Japanese,
 }
 
-impl InputMode {
+impl<'a> InputMode<'a> {
     pub fn new() -> Self {
         InputMode::default()
     }
 
     // グリフからModeを取得
-    pub fn from_glyph(glyph: &str) -> Self {
-        match glyph {
+    pub fn from_glyph<S>(glyph: S) -> Self
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        let glyph_cow = glyph.into();
+
+        match glyph_cow.as_ref() {
             FULL_HIRAGANA => Self::Hiragana,
             FULL_KATAKANA => Self::FullKatakana,
             HALF_KATAKANA => Self::HalfKatakana,
@@ -74,13 +81,12 @@ impl InputMode {
             CHINESE_PINYIN => Self::ChinisePinyin,
             JAPANESE => Self::Japanese,
 
-            // 他のアイコン（Wi-Fi等）は無視
-            // どうやらキーボードレイアウトの情報は同じ場所に入るらしく
-            // ENG のように取得されている
+            // 他のアイコンは無視
+            // どうやらキーボードレイアウトの情報は同じ場所に入るらしくENG のように取得されている
             _ => {
-                log::debug!("Unknown IME Glyph detected: {:?}", glyph);
+                log::debug!("Unknown IME Glyph detected: {:?}", glyph_cow);
                 // 文字列の最初の1文字を取り出して文字コードを確認
-                if let Some(c) = glyph.chars().next() {
+                if let Some(c) = glyph_cow.chars().next() {
                     // Unicodeの私的領域の範囲かチェック
                     // 一般的なPUA範囲: U+E000 ～ U+F8FF
                     if ('\u{e000}'..='\u{f8ff}').contains(&c) {
@@ -88,7 +94,7 @@ impl InputMode {
                         Self::Unknown
                     } else {
                         // "ENG" などの文字列
-                        Self::Layout(glyph.to_string())
+                        Self::Layout(glyph_cow)
                     }
                 } else {
                     Self::Unknown
@@ -98,60 +104,63 @@ impl InputMode {
     }
 
     // 表示用テキストを取得
-    pub fn as_str(&self, text_format: TextFormat) -> &str {
+    // 動的に文字列を生成しないため 'a をそのまま返せる
+    pub fn as_str(&self, text_format: TextFormat) -> Cow<'a, str> {
         match text_format {
             TextFormat::Full => self.as_str_full(),
             TextFormat::Compact => self.as_str_compact(),
         }
     }
 
-    fn as_str_full(&self) -> &str {
+    fn as_str_full(&self) -> Cow<'a, str> {
         match self {
-            Self::Hiragana => "ひらがな (あ)",
-            Self::FullKatakana => "全角カタカナ (カ)",
-            Self::HalfKatakana => "半角カタカナ (ｶ)",
+            Self::Hiragana => Cow::Borrowed("ひらがな (あ)"),
+            Self::FullKatakana => Cow::Borrowed("全角カタカナ (カ)"),
+            Self::HalfKatakana => Cow::Borrowed("半角カタカナ (ｶ)"),
 
-            Self::HalfAlpha => "半角英数 (A)",
-            Self::FullAlpha => "全角英数 (Ａ)",
+            Self::HalfAlpha => Cow::Borrowed("半角英数 (A)"),
+            Self::FullAlpha => Cow::Borrowed("全角英数 (Ａ)"),
 
-            Self::Korean => "한국어 (한)",
-            Self::Key12on => "12키 (가)",
+            Self::Korean => Cow::Borrowed("한국어 (한)"),
+            Self::Key12on => Cow::Borrowed("12키 (가)"),
 
-            Self::ChineseChangjie => "倉頡 (倉)",
-            Self::QwertyOn => "中文 (中)",
-            Self::QwertyOff => "英文 (英)",
-            Self::ChiniseBoPoMoFo => "注音 (ㄅ)",
-            Self::ChiniseQuick => "速成 (速)",
-            Self::ChinisePinyin => "简体 (简)",
-            Self::Japanese => "日文 (日)",
+            Self::ChineseChangjie => Cow::Borrowed("倉頡 (倉)"),
+            Self::QwertyOn => Cow::Borrowed("中文 (中)"),
+            Self::QwertyOff => Cow::Borrowed("英文 (英)"),
+            Self::ChiniseBoPoMoFo => Cow::Borrowed("注音 (ㄅ)"),
+            Self::ChiniseQuick => Cow::Borrowed("速成 (速)"),
+            Self::ChinisePinyin => Cow::Borrowed("简体 (简)"),
+            Self::Japanese => Cow::Borrowed("日文 (日)"),
 
-            Self::Unknown => "",
-            Self::Layout(s) => s.as_str(),
+            Self::Unknown => Cow::Borrowed(""),
+            // 内部の Cow をクローンして返します（Borrowed ならポインタのコピーのみで軽量）
+            Self::Layout(s) => s.clone(),
         }
     }
 
-    fn as_str_compact(&self) -> &str {
+    fn as_str_compact(&self) -> Cow<'a, str> {
         match self {
-            Self::Hiragana => "あ",
-            Self::FullKatakana => "カ",
-            Self::HalfKatakana => "ｶ",
+            Self::Hiragana => Cow::Borrowed("あ"),
+            Self::FullKatakana => Cow::Borrowed("カ"),
+            Self::HalfKatakana => Cow::Borrowed("ｶ"),
 
-            Self::HalfAlpha => "A",
-            Self::FullAlpha => "Ａ",
+            Self::HalfAlpha => Cow::Borrowed("A"),
+            Self::FullAlpha => Cow::Borrowed("Ａ"),
 
-            Self::Korean => "한",
-            Self::Key12on => "가",
+            Self::Korean => Cow::Borrowed("한"),
+            Self::Key12on => Cow::Borrowed("가"),
 
-            Self::ChineseChangjie => "倉",
-            Self::QwertyOn => "中",
-            Self::QwertyOff => "英",
-            Self::ChiniseBoPoMoFo => "ㄅ",
-            Self::ChiniseQuick => "速",
-            Self::ChinisePinyin => "简",
-            Self::Japanese => "日",
+            Self::ChineseChangjie => Cow::Borrowed("倉"),
+            Self::QwertyOn => Cow::Borrowed("中"),
+            Self::QwertyOff => Cow::Borrowed("英"),
+            Self::ChiniseBoPoMoFo => Cow::Borrowed("ㄅ"),
+            Self::ChiniseQuick => Cow::Borrowed("速"),
+            Self::ChinisePinyin => Cow::Borrowed("简"),
+            Self::Japanese => Cow::Borrowed("日"),
 
-            Self::Unknown => "",
-            Self::Layout(s) => s.as_str(),
+            Self::Unknown => Cow::Borrowed(""),
+            // 内部の Cow をクローンして返す
+            Self::Layout(s) => s.clone(),
         }
     }
 

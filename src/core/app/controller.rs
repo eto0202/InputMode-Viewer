@@ -13,14 +13,14 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum Message {
     Cap(InputCapability), // 入力可能性
-    Mode(InputMode),      // 入力タイプ
+    Mode(InputMode<'static>),      // 入力タイプ
     ConfigUpdated,        // 設定更新
 }
 
 pub struct AppState {
     pub shared: Arc<SharedState>,
     pub cap: InputCapability,
-    pub mode: InputMode,
+    pub mode: InputMode<'static>,
     pub currently_visible: bool,
     pub show_state: ShowState,
     pub refresh_requested: bool,
