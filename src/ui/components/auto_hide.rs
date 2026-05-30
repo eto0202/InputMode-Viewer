@@ -21,7 +21,7 @@ pub fn auto_hide(
                 }
             }
 
-            let _ = config::save_config(AppConfig::global(cx));
+            config::request_config_save(AppConfig::global(cx).clone());
         });
 
     let number_input = NumberInput::new(&number_input)

@@ -64,7 +64,7 @@ pub fn spawn_position_thread(
             // THREAD_PRIORITY_HIGHEST: 標準より2段階高い
             // THREAD_PRIORITY_ABOVE_NORMAL: 標準より1段階高い
             if let Err(e) = SetThreadPriority(thread_handle, THREAD_PRIORITY_HIGHEST) {
-                log::warn!("Failed to set thread priority: {:?}", e);
+                tracing::warn!("Failed to set thread priority: {:?}", e);
             }
         }
 
@@ -76,7 +76,7 @@ pub fn spawn_position_thread(
             &rx,
             thread_wake_event,
         ) {
-            log::warn!("Position thread Error: {:?}. Restarting...", e);
+            tracing::warn!("Position thread Error: {:?}. Restarting...", e);
             std::thread::sleep(Duration::from_secs(3));
         }
     });
@@ -122,7 +122,7 @@ fn run_positon_thread(
         while let Ok(ctrl) = rx.try_recv() {
             match ctrl {
                 ControlMessage::ResetPosition | ControlMessage::Refresh => {
-                    log::info!("Position reset triggered by config change.");
+                    tracing::info!("Position reset triggered by config change.");
                     // アニメーションが動いているプロパティに対して直接値をセットすると
                     // 現在実行中のアニメーションが強制的に切断され、静的な値が優先される
                     // renderer の mouse_tracking を呼び出し、PropertySet の値は更新されているが
@@ -355,7 +355,7 @@ impl WaitableTimer {
 
         match handle {
             Err(e) => {
-                log::warn!("Failed to get WaitableTimer HANDLE: {}", e);
+                tracing::warn!("Failed to get WaitableTimer HANDLE: {}", e);
                 None
             }
             Ok(handle) => Some(Self { handle }),
@@ -380,7 +380,7 @@ impl Drop for WaitableTimer {
     fn drop(&mut self) {
         if !self.handle.is_invalid() {
             unsafe {
-                log::info!("WaitableTimer Closing handle...");
+                tracing::info!("WaitableTimer Closing handle...");
                 let _ = CloseHandle(self.handle);
             }
         }

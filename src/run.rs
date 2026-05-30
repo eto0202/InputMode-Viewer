@@ -31,7 +31,7 @@ pub fn app_run() -> anyhow::Result<()> {
     let mut cfg = config::load_config();
 
     set_startup(&cfg)?;
-    log::info!("Setting startup successfully");
+    tracing::info!("Setting startup successfully");
 
     let args: Vec<String> = std::env::args().collect();
     let is_ui_mode = args.get(1).map(|s| s.as_str()) == Some("--ui");
@@ -44,13 +44,13 @@ pub fn app_run() -> anyhow::Result<()> {
             .and_then(|s| s.parse::<u32>().ok());
 
         settings::run(parent_pid)?;
-        log::info!("Setting process started successfully");
+        tracing::info!("Setting process started successfully");
         return Ok(());
     } else {
         restart_as_admin(&mut cfg)?;
 
         logic::run()?;
-        log::info!("Main logic started successfully");
+        tracing::info!("Main logic started successfully");
     }
 
     Ok(())
@@ -62,17 +62,17 @@ fn set_startup(cfg: &AppConfig) -> anyhow::Result<()> {
     let _guard = ComGuard::new(COINIT_APARTMENTTHREADED)?;
 
     if cfg.startup {
-        log::info!("Startup task registered/updated");
+        tracing::info!("Startup task registered/updated");
         if let Err(e) = register_startup_task(cfg.administrator) {
-            log::warn!("Failed to register startup task: {}", e);
+            tracing::warn!("Failed to register startup task: {}", e);
         }
-        log::info!(
+        tracing::info!(
             "Change task run level: {:?}",
             if cfg.administrator { "HIGHEST" } else { "LUA" }
         );
     } else {
         unregister_startup_task()?;
-        log::info!("Startup task removed");
+        tracing::info!("Startup task removed");
     }
     Ok(())
 }
@@ -107,7 +107,7 @@ pub fn register_startup_task(admin_required: bool) -> anyhow::Result<()> {
             TASK_LOGON_INTERACTIVE_TOKEN,
             &VARIANT::default(), // SDDL
         )?;
-        log::info!("Register startup task");
+        tracing::info!("Register startup task");
     }
     Ok(())
 }
@@ -118,13 +118,13 @@ pub fn unregister_startup_task() -> anyhow::Result<()> {
         let root_folder = service.GetFolder(&BSTR::from(r"\"))?;
         // タスク名が一致するものを削除
         match root_folder.DeleteTask(&BSTR::from("InputModeViewer_Startup"), 0) {
-            Ok(_) => log::info!("Successfully deleted startup task."),
+            Ok(_) => tracing::info!("Successfully deleted startup task."),
             Err(e) if e.code() == HRESULT(0x80070002u32 as i32) => {
-                log::info!("Startup task not found, nothing to delete.");
+                tracing::info!("Startup task not found, nothing to delete.");
             }
             Err(e) => return Err(anyhow::anyhow!("Failed to delete task: {}", e)),
         }
-        log::info!("Unregister startup task");
+        tracing::info!("Unregister startup task");
     }
     Ok(())
 }
@@ -200,11 +200,11 @@ fn restart_as_admin(cfg: &mut AppConfig) -> anyhow::Result<()> {
             cfg.administrator = true;
             config::save_config(cfg)?;
         }
-        log::info!("Running as administrator.");
+        tracing::info!("Running as administrator.");
     } else {
         // 現在一般権限で、設定では管理者として実行となっている場合
         if cfg.administrator {
-            log::info!("Attempting to elevate privileges...");
+            tracing::info!("Attempting to elevate privileges...");
 
             // 自らの実行ファイルパスを取得
             let exe_path = env::current_exe().context("Failed to retrieve the execution path")?;
@@ -224,12 +224,12 @@ fn restart_as_admin(cfg: &mut AppConfig) -> anyhow::Result<()> {
             if result.0 as usize > 32 {
                 process::exit(0);
             } else {
-                log::warn!("Failed to elevate. Falling back to normal user.");
+                tracing::warn!("Failed to elevate. Falling back to normal user.");
                 cfg.administrator = false;
                 config::save_config(cfg)?;
             }
         }
-        log::info!("Not running as administrator.");
+        tracing::info!("Not running as administrator.");
     }
     Ok(())
 }

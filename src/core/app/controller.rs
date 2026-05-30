@@ -74,28 +74,28 @@ pub struct Controller {
 impl ApplicationHandler<Message> for Controller {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if let Err(e) = self.handle_resumed(el) {
-            log::error!("Application error during resume: {}", e);
+            tracing::error!("Application error during resume: {}", e);
             el.exit();
         }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         if let Err(e) = self.handle_window_event(el, event) {
-            log::error!("Window event error: {}", e);
+            tracing::error!("Window event error: {}", e);
             el.exit();
         }
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if let Err(e) = self.handle_about_to_wait(el) {
-            log::error!("About to wait error: {}", e);
+            tracing::error!("About to wait error: {}", e);
             el.exit();
         }
     }
 
     fn user_event(&mut self, el: &ActiveEventLoop, msg: Message) {
         if let Err(e) = self.handle_user_event(msg) {
-            log::error!("User event error: {}", e);
+            tracing::error!("User event error: {}", e);
             el.exit();
         }
     }
@@ -115,7 +115,7 @@ impl Controller {
         let cfg = self.cfg.as_ref().context("AppCore missing")?;
         let v_screen = self.state.shared.v_screen.load();
         let core = AppCore::new(el, cfg.clone(), self.state.mode.clone(), v_screen)?;
-        log::info!("AppCore initialized");
+        tracing::info!("AppCore initialized");
 
         // マウス監視スレッドの起動
         if self.position_thread_tx.is_none() {
@@ -123,14 +123,14 @@ impl Controller {
                 spawn_position_thread(&core, &self.state).expect("Failed to spawn thread");
 
             self.position_thread_tx = Some(pos_ctrl);
-            log::info!("Position tracking thread spawned.");
+            tracing::info!("Position tracking thread spawned.");
         }
 
         self.core = Some(core);
 
         // 初回ウィンドウを描画
         self.redraw_requested().unwrap();
-        log::info!("First redraw requested");
+        tracing::info!("First redraw requested");
 
         Ok(())
     }
@@ -193,7 +193,7 @@ impl Controller {
                         .as_ref()
                         .context("Missing Position thread")?;
                     if let Err(e) = tx.send(ControlMessage::Refresh) {
-                        log::error!("Failed to send Refresh: {:?}", e);
+                        tracing::error!("Failed to send Refresh: {:?}", e);
                     }
                 }
 
@@ -216,7 +216,7 @@ impl Controller {
                         .as_ref()
                         .context("Missing Position thread")?;
                     if let Err(e) = tx.send(ControlMessage::ResetPosition) {
-                        log::error!("Failed to send ResetPosition: {:?}", e);
+                        tracing::error!("Failed to send ResetPosition: {:?}", e);
                     }
                 }
             }
@@ -375,11 +375,11 @@ fn config_update(
         startup_changed = lock.startup != new_cfg.startup;
 
         cfg.store(Arc::new(new_cfg.clone()));
-        log::debug!("config updated!");
+        tracing::debug!("config updated!");
     }
     // 最新データを直接渡して反映
     apply_config_to_all(core, state, new_cfg)?;
-    log::debug!("Apply config to all");
+    tracing::debug!("Apply config to all");
 
     if admin_changed {
         apply_admin_changed(new_cfg)?;
@@ -487,10 +487,10 @@ fn wait_tray_event(el: &ActiveEventLoop) {
 }
 
 fn apply_admin_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
-    log::info!("Administrator setting changed. Restarting...");
+    tracing::info!("Administrator setting changed. Restarting...");
     if new_cfg.administrator != utils::elevated_check() {
         // 権限降格
-        log::info!("Dropping privileges via explorer.exe...");
+        tracing::info!("Dropping privileges via explorer.exe...");
         utils::restart_application(true);
     } else {
         utils::restart_application(false);
@@ -501,17 +501,17 @@ fn apply_admin_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
 fn apply_startup_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
     if utils::elevated_check() {
         if new_cfg.startup {
-            log::info!("Syncing startup task imme diately (Admin mode)");
+            tracing::info!("Syncing startup task imme diately (Admin mode)");
             run::register_startup_task(true)?;
         } else {
             run::unregister_startup_task()?;
         }
     } else if new_cfg.startup {
         // タスク登録（管理者権限が必要）のため昇格再起動が必要
-        log::info!("Startup enabled in normal mode. Restarting for elevation...");
+        tracing::info!("Startup enabled in normal mode. Restarting for elevation...");
         utils::restart_application(false);
     } else {
-        log::info!("Startup disabled in normal mode. Restarting for elevation...");
+        tracing::info!("Startup disabled in normal mode. Restarting for elevation...");
         utils::restart_application(false);
     }
     Ok(())

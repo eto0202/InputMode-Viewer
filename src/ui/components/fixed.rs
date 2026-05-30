@@ -39,7 +39,7 @@ impl Fixed {
 
                     this.fixed.bg_selected_color = *color;
 
-                    let _ = config::save_config(AppConfig::global(cx));
+                    config::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe(&font_color, |this, _, e, cx| match e {
@@ -49,7 +49,7 @@ impl Fixed {
 
                     this.fixed.font_selected_color = *color;
 
-                    let _ = config::save_config(AppConfig::global(cx));
+                    config::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe_in(
@@ -64,7 +64,7 @@ impl Fixed {
                         this.fixed.number_input_value = value;
 
                         AppConfig::global_mut(cx).fixed.auto_hide.time = value;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     }
                     InputEvent::Focus => {}
                     _ => {}
@@ -81,7 +81,7 @@ impl Fixed {
 
                             AppConfig::global_mut(cx).fixed.auto_hide.time =
                                 this.fixed.number_input_value;
-                            let _ = config::save_config(AppConfig::global(cx));
+                            config::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -96,7 +96,7 @@ impl Fixed {
 
                             AppConfig::global_mut(cx).fixed.auto_hide.time =
                                 this.fixed.number_input_value;
-                            let _ = config::save_config(AppConfig::global(cx));
+                            config::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -137,7 +137,7 @@ impl Fixed {
                     |cx: &App| AppConfig::global(cx).fixed.style.font_size.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.font_size = val as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.font_size),
@@ -173,7 +173,7 @@ impl Fixed {
                             .parse::<app_config::TextFormat>()
                             .unwrap_or(app_config::TextFormat::Full);
                         AppConfig::global_mut(cx).fixed.style.text_format = style;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.text_format.as_ref().to_string()),
@@ -199,7 +199,7 @@ impl Fixed {
                     |cx: &App| AppConfig::global(cx).fixed.style.padding.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.padding = val as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.padding),
@@ -217,7 +217,7 @@ impl Fixed {
                     |cx: &App| (AppConfig::global(cx).fixed.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.opacity = (val / 100.0) as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.opacity * 100.0),
@@ -241,7 +241,7 @@ impl Fixed {
                     |val: SharedString, cx: &mut App| {
                         let pos = val.as_str().parse::<WindowPos>().unwrap_or(WindowPos::Top);
                         AppConfig::global_mut(cx).fixed.pos = pos;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.pos.as_ref().to_string()),
@@ -259,7 +259,7 @@ impl Fixed {
                     |cx: &App| (AppConfig::global(cx).fixed.margin) as f64,
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.margin = val as i32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.margin),
@@ -286,7 +286,7 @@ impl Fixed {
                             .parse::<DisplayStyle>()
                             .unwrap_or(AppConfig::global(cx).fixed.display_style);
                         AppConfig::global_mut(cx).fixed.display_style = s;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.display_style.as_ref().to_string()),

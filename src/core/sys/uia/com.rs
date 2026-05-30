@@ -9,10 +9,10 @@ impl ComGuard {
         hr.ok()?;
         // S_FALSE : すでに初期化済み
         if hr == HRESULT(1) {
-            log::debug!("COM already initialized");
+            tracing::debug!("COM already initialized");
         }
 
-        log::info!("COM Initialize");
+        tracing::info!("COM Initialize");
         Ok(ComGuard)
     }
 }
@@ -22,6 +22,6 @@ impl Drop for ComGuard {
         unsafe {
             CoUninitialize();
         };
-        log::debug!("COM Drop");
+        tracing::debug!("COM Drop");
     }
 }

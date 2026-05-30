@@ -102,7 +102,7 @@ impl Render for SettingsWindow {
                                 AppConfig::global_mut(cx).administrator = cur_admin;
                                 AppConfig::global_mut(cx).startup = cur_start;
 
-                                let _ = config::save_config(AppConfig::global(cx));
+                                config::request_config_save(AppConfig::global(cx).clone());
                             }),
                     )
                 } else {

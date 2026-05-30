@@ -37,7 +37,7 @@ impl Floating {
                     AppConfig::global_mut(cx).floating.style.bg_color =
                         color.unwrap_or_default().to_d2d1_color();
                     this.floating.bg_selected_color = *color;
-                    let _ = config::save_config(AppConfig::global(cx));
+                    config::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe(&font_color, |this, _, ev, cx| match ev {
@@ -45,7 +45,7 @@ impl Floating {
                     AppConfig::global_mut(cx).floating.style.font_color =
                         color.unwrap_or_default().to_d2d1_color();
                     this.floating.font_selected_color = *color;
-                    let _ = config::save_config(AppConfig::global(cx));
+                    config::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe_in(
@@ -60,7 +60,7 @@ impl Floating {
                         this.floating.number_input_value = value;
 
                         AppConfig::global_mut(cx).floating.auto_hide.time = value;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     }
                     InputEvent::Focus => {}
                     _ => {}
@@ -77,7 +77,7 @@ impl Floating {
 
                             AppConfig::global_mut(cx).floating.auto_hide.time =
                                 this.floating.number_input_value;
-                            let _ = config::save_config(AppConfig::global(cx));
+                            config::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -92,7 +92,7 @@ impl Floating {
 
                             AppConfig::global_mut(cx).floating.auto_hide.time =
                                 this.floating.number_input_value;
-                            let _ = config::save_config(AppConfig::global(cx));
+                            config::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -133,7 +133,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.style.font_size.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.font_size = val as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.font_size),
@@ -169,7 +169,7 @@ impl Floating {
                             .parse::<TextFormat>()
                             .unwrap_or(TextFormat::Full);
                         AppConfig::global_mut(cx).floating.style.text_format = style;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.text_format.as_ref().to_string()),
@@ -195,7 +195,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.style.padding.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.padding = val as f32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.padding),
@@ -214,7 +214,7 @@ impl Floating {
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.opacity = (val / 100.0) as f32;
 
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.opacity * 100.0),
@@ -232,7 +232,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.offset.x.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.offset.x = val as i32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.offset.x),
@@ -250,7 +250,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.offset.y.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.offset.y = val as i32;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.offset.y),
@@ -277,7 +277,7 @@ impl Floating {
                             .parse::<DisplayStyle>()
                             .unwrap_or(DisplayStyle::Smart(AutoHide::default()));
                         AppConfig::global_mut(cx).floating.display_style = s;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.display_style.as_ref().to_string()),

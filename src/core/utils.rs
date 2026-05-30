@@ -1,7 +1,10 @@
 use anyhow::Context;
 use check_elevation::is_elevated;
 use directories::ProjectDirs;
-use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
+
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use std::{collections::HashSet, path::Path};
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, HWND, INVALID_HANDLE_VALUE, MAX_PATH},
@@ -22,23 +25,40 @@ use windows::Win32::{
 };
 use windows_core::{HSTRING, w};
 
-pub fn init_logger() -> anyhow::Result<()> {
+pub fn init_logger() -> anyhow::Result<WorkerGuard> {
     // 保存先
-    let proj_dirs = ProjectDirs::from("com", "", "input_mode_viewer")
+    let proj_dirs = ProjectDirs::from("com", "", "InputMode-Viewer")
         .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     let log_dir = proj_dirs.data_local_dir().join("logs");
 
-    // ロガーの初期化
-    Logger::try_with_str("debug")?
-        .log_to_file(FileSpec::default().directory(log_dir).basename("app"))
-        .rotate(
-            Criterion::Size(10 * 1024 * 1024), // 10MBごとに新しいファイルへ
-            Naming::Timestamps,
-            Cleanup::KeepLogFiles(5), // 最新の3つだけ残して古いのは消す
-        )
-        .start()?;
+    // ディレクトリがない場合は作成しておく
+    std::fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
 
-    Ok(())
+    // ファイル出力の設定
+    // ファイル名のプレフィックスなどを設定
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "app.log");
+
+    // 非ブロックで書き込む
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    // ロガーの組み立て
+    tracing_subscriber::registry()
+        // ログレベルの設定
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")))
+        // コンソール出力（標準出力）
+        .with(fmt::layer().with_writer(std::io::stdout))
+        // ファイル出力
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false) // ファイルには色コードを入れない
+                .with_target(true) // どのモジュールからのログか表示
+                .with_thread_ids(true), // スレッドIDを表示
+        )
+        .with(ErrorLayer::default())
+        .init();
+
+    Ok(guard)
 }
 
 // メモリ上のバイト列から画像をデコードしアイコンを生成
@@ -77,10 +97,10 @@ pub fn restart_application(dropping_privileges: bool) {
     };
 
     if result.0 as usize > 32 {
-        log::info!("Restart process spawned successfully. Exiting current process.");
+        tracing::info!("Restart process spawned successfully. Exiting current process.");
         std::process::exit(0);
     } else {
-        log::error!(
+        tracing::error!(
             "Failed to restart application via ShellExecuteW: {:?}",
             result
         );
@@ -89,7 +109,7 @@ pub fn restart_application(dropping_privileges: bool) {
 
 pub fn elevated_check() -> bool {
     let current_is_elevated = is_elevated().unwrap_or(false);
-    log::info!(
+    tracing::info!(
         "Administrator: {:?}",
         if current_is_elevated { "TRUE" } else { "FALSE" }
     );
@@ -200,7 +220,7 @@ fn create_process_snapshot() -> Option<HANDLE> {
         match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
             Ok(h) => h,
             Err(e) => {
-                log::error!("Failed to create a snapshot: {:?}", e);
+                tracing::error!("Failed to create a snapshot: {:?}", e);
                 return None;
             }
         }

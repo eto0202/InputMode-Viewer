@@ -1,10 +1,11 @@
 #![windows_subsystem = "windows"]
+use anyhow::Context;
 use input_mode_viewer::{
     core::{app::mouse_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue, utils},
     run::app_run,
 };
 use windows::Win32::{
-    System::WinRT::{RO_INIT_SINGLETHREADED},
+    System::WinRT::RO_INIT_SINGLETHREADED,
     UI::{
         HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
         WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
@@ -22,41 +23,50 @@ use windows_core::{HSTRING, w};
 // positon_threadがエラー落ちした時、core.renderer.get_controller() から作り直した新しいコントローラーを渡す
 // メインスレッドも自動復旧するように
 // リスタート時や復旧時に通知を出す
+// on_app_quit が動いていないっぽい
 
 fn main() -> anyhow::Result<()> {
-    utils::init_logger()?;
-    log::info!("Logger initialized successful");
-
+    let _log_guard = utils::init_logger()?;
+    // 起動時の環境情報を入れる
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        os = std::env::consts::OS,
+        "Application starting..."
+    );
     set_panic_hook();
-    log::info!("Set panic hook successful");
 
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
     // COMの初期化 (WinRT用)
-    let _guard = RoGuard::new(RO_INIT_SINGLETHREADED)?;
+    let _guard =
+        RoGuard::new(RO_INIT_SINGLETHREADED).context("Failed to initialize COM (WinRT)")?;
     // DispatcherQueueの初期化
-    let _queue_controller = init_dispatcher_queue()?;
+    let _queue_controller =
+        init_dispatcher_queue().context("Failed to initialize DispatcherQueue")?;
+
+    tracing::info!("Environment initialized successfully");
 
     if let Err(e) = app_run() {
-        let error_msg = format!("{:?}", e);
-        log::error!("Fatal error: {}", error_msg);
+        tracing::error!(error = ?e, "Application terminated with error:\n{:#?}", e);
 
+        // ユーザー通知用メッセージ
+        let user_error_msg = format!("{:#?}", e);
         unsafe {
             MessageBoxW(
                 None,
-                &HSTRING::from(&error_msg),
+                &HSTRING::from(&user_error_msg),
                 w!("Application Error"),
                 MB_OK | MB_ICONERROR,
             );
         }
         std::process::exit(1);
     }
-    log::info!("Main process started successfully");
+    tracing::info!("Application exited gracefully");
     Ok(())
 }
 
-// パニックが起きた時に、自動的に log::error! に流す
+// パニックが起きた時に、自動的に tracing::error! に流す
 fn set_panic_hook() {
     std::panic::set_hook(Box::new(|panic_info| {
         // パニックメッセージの取得を試みる
@@ -75,7 +85,15 @@ fn set_panic_hook() {
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "unknown location".to_string());
 
-        // ログファイルにエラーとして書き込む
-        log::error!("PANIC occurred at {}: {}", location, message);
+        // 現在のスパン（どの #[instrument] 関数の中にいるか）を取得
+        let span_trace = tracing_error::SpanTrace::capture();
+
+        // tracingのエラーとして記録
+        tracing::error!(
+            panic_location = %location,
+            panic_message = %message,
+            span_trace = %span_trace,
+            "A panic occurred"
+        );
     }));
 }

@@ -73,7 +73,7 @@ impl ListDelegate for ProcessListDelegate {
                                         } else {
                                             config.process_cfg.whitelist.insert(name.as_str());
                                         }
-                                        let _ = config::save_config(config);
+                                        config::request_config_save(config.clone());
                                     });
                                 }
                             }),
@@ -207,7 +207,7 @@ impl ListDelegate for CfgListDelegate {
                                         } else {
                                             config.process_cfg.whitelist.remove(name.as_str());
                                         }
-                                        let _ = config::save_config(config);
+                                        config::request_config_save(config.clone());
                                     });
                                 }
                             }),

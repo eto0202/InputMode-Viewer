@@ -23,7 +23,7 @@ pub fn uia_init() -> anyhow::Result<(IUIAutomation, IUIAutomationCacheRequest)> 
     // キャッシュリクエスト
     let cache = create_cache_request(&uia).context("Failed to create cache request")?;
 
-    log::info!("IUIAutomation initialization successful");
+    tracing::info!("IUIAutomation initialization successful");
     Ok((uia, cache))
 }
 

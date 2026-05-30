@@ -130,24 +130,24 @@ impl DCompRenderer {
     ) -> anyhow::Result<(Self, f32, f32)> {
         // 基盤
         let (d3d_device, dxgi_device, dxgi_factory, _, d2d_context) = create_graphics_foundation()?;
-        log::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
+        tracing::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
 
         // Composition層 (WinRT)
         let (compositor, desktop_target, root_visual, sprite_visual) =
             create_composition_layer(hwnd, &dxgi_device)?;
-        log::info!("DirectComposition OK");
+        tracing::info!("DirectComposition OK");
 
         // タイポグラフィ
         let (dw_factory, format, lw, lh) = create_typography(style, mode)?;
         let font_brush = unsafe { d2d_context.CreateSolidColorBrush(&style.font_color, None)? };
         let bg_brush = unsafe { d2d_context.CreateSolidColorBrush(&style.bg_color, None)? };
-        log::info!("Typography (DirectWrite) OK");
+        tracing::info!("Typography (DirectWrite) OK");
 
         // スワップチェーン作成
         let width = (lw * scale as f32) as u32;
         let height = (lh * scale as f32) as u32;
         let swap_chain = create_swap_chain(&dxgi_factory, &d3d_device, width, height, transparent)?;
-        log::info!("Presentation (SwapChain, Brushes) OK");
+        tracing::info!("Presentation (SwapChain, Brushes) OK");
 
         // Vcyncの設定
         let waitable_object = unsafe {
@@ -157,7 +157,7 @@ impl DCompRenderer {
                 .SetMaximumFrameLatency(1)?;
             sc2.GetFrameLatencyWaitableObject()
         };
-        log::info!("WaitableObject OK");
+        tracing::info!("WaitableObject OK");
 
         let dpi = (scale * 96.0) as f32;
         unsafe {
@@ -172,10 +172,10 @@ impl DCompRenderer {
         let pending_alpha_recreation = Some(current_alpha_mode);
 
         let (property_set, mouse_expr) = create_expression_animation(&compositor, &sprite_visual)?;
-        log::info!("CompositionPropertySet OK");
+        tracing::info!("CompositionPropertySet OK");
 
         connect_swap_chain_to_visual(&compositor, &sprite_visual, &swap_chain)?;
-        log::info!("Connect swap chain to visual");
+        tracing::info!("Connect swap chain to visual");
 
         let renderer = Self {
             d3d_device,
@@ -222,7 +222,7 @@ impl DCompRenderer {
                     // 成功したときだけ、現在のモードを書き換える
                     self.current_alpha_mode = new_mode;
                 } else {
-                    log::error!("Failed to recreate swap chain");
+                    tracing::error!("Failed to recreate swap chain");
                     return Ok(());
                 }
             }
@@ -360,7 +360,7 @@ impl DCompRenderer {
         style: &WindowStyle,
         scale: f64,
     ) -> anyhow::Result<()> {
-        log::info!("Recreate swapchain");
+        tracing::info!("Recreate swapchain");
         unsafe {
             self.d2d_context.SetTarget(None);
             // waitable_object を閉じる
@@ -402,7 +402,7 @@ impl DCompRenderer {
     }
 
     pub fn request_alpha_mode(&mut self, transparent: bool) {
-        log::info!("Request alpha mode");
+        tracing::info!("Request alpha mode");
         let mode = if transparent {
             D2D1_ALPHA_MODE_PREMULTIPLIED
         } else {
@@ -411,7 +411,7 @@ impl DCompRenderer {
 
         // 現在のモードと違う場合だけ、作り直しを予約する
         if self.current_alpha_mode != mode {
-            log::info!(
+            tracing::info!(
                 "current: {:?} -> changed: {:?}",
                 self.current_alpha_mode,
                 mode
@@ -545,7 +545,7 @@ impl DCompRenderer {
             text_layout.GetMetrics(&mut metrics)?;
         };
 
-        log::debug!("current text: {:?} current metrics: {:#?}", mode, metrics);
+        tracing::debug!("current text: {:?} current metrics: {:#?}", mode, metrics);
 
         Ok(metrics)
     }
@@ -667,21 +667,21 @@ fn create_composition_layer(
 )> {
     // Compositor作成
     let compositor = Compositor::new().expect("Faild to create compositor");
-    log::info!("Create Compositor OK");
+    tracing::info!("Create Compositor OK");
 
     // HWNDへの紐付け (DesktopWindowTarget)
     let interop: ICompositorDesktopInterop = compositor.cast()?;
     let desktop_target = unsafe { interop.CreateDesktopWindowTarget(hwnd, true)? };
-    log::info!("Set DesktopWindowTarget");
+    tracing::info!("Set DesktopWindowTarget");
 
     // VisualTree の構築
     let root_visual = compositor.CreateContainerVisual()?;
     desktop_target.SetRoot(&root_visual)?;
-    log::info!("Create Visual OK");
+    tracing::info!("Create Visual OK");
 
     let sprite_visual = compositor.CreateSpriteVisual()?;
     root_visual.Children()?.InsertAtTop(&sprite_visual)?;
-    log::info!("Create SpriteVisual OK");
+    tracing::info!("Create SpriteVisual OK");
 
     Ok((compositor, desktop_target, root_visual, sprite_visual))
 }

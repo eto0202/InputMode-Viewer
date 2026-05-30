@@ -46,7 +46,7 @@ pub fn general(
                     |cx: &App| AppConfig::global(cx).transparent,
                     |val: bool, cx: &mut App| {
                         AppConfig::global_mut(cx).transparent = val;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 ).default_value(AppConfig::default().transparent),
             )
@@ -67,7 +67,7 @@ pub fn general(
                             .parse::<RenderingQuality>()
                             .unwrap_or(RenderingQuality::Balanced);
                         AppConfig::global_mut(cx).quality = q;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().quality.as_ref().to_string()),
@@ -89,7 +89,7 @@ pub fn general(
                             .unwrap_or(ConfigTheme::System);
                         mode.theme_change(cx);
                         AppConfig::global_mut(cx).cfg_theme = mode;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().cfg_theme.as_ref().to_string()),
@@ -110,14 +110,14 @@ pub fn general(
                             .into()
                     },
                     |val: SharedString, cx: &mut App| {
-                        log::debug!("Current val: {:?}", val);
+                        tracing::debug!("Current val: {:?}", val);
                         let role = val
                             .as_str()
                             .parse::<WindowRole>()
                             .unwrap_or(WindowRole::Fixed);
-                        log::debug!("Current Role: {:?}", role);
+                        tracing::debug!("Current Role: {:?}", role);
                         AppConfig::global_mut(cx).active_role = role;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().active_role.as_ref().to_string()),

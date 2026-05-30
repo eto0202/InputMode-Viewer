@@ -13,7 +13,7 @@ use crate::{guard_opt, guard_res};
 struct HookGuard(HWINEVENTHOOK, HHOOK, HHOOK);
 impl Drop for HookGuard {
     fn drop(&mut self) {
-        log::debug!("Unhook drop");
+        tracing::debug!("Unhook drop");
         unsafe {
             let _ = UnhookWinEvent(self.0);
             let _ = UnhookWindowsHookEx(self.1);
@@ -111,7 +111,7 @@ pub fn win_hooks() -> mpsc::Receiver<AppEvent> {
             let mouse_hook =
                 SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), Some(HINSTANCE::default()), 0)?;
 
-            log::info!("Set hook successful");
+            tracing::info!("Set hook successful");
             (win_hook, kbd_hook, mouse_hook)
         };
 

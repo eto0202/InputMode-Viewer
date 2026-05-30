@@ -19,7 +19,7 @@ pub fn mode_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>)
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_monitor_loop(&proxy, &rx) {
-            log::warn!("IME Monitor Error: {:?}. Restarting...", e);
+            tracing::warn!("IME Monitor Error: {:?}. Restarting...", e);
             std::thread::sleep(std::time::Duration::from_secs(3));
         }
     });
@@ -31,7 +31,7 @@ fn run_monitor_loop(
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
     let mut ime: ImeMonitor = ImeMonitor::new()?;
-    log::info!("Run ImeMonitor successful");
+    tracing::info!("Run ImeMonitor successful");
 
     let mut processed = std::time::Instant::now();
     let mut mode: InputMode<'static> = InputMode::new();
@@ -46,7 +46,7 @@ fn run_monitor_loop(
                 if processed.elapsed() < std::time::Duration::from_millis(200) {
                     continue;
                 }
-                log::debug!("uia_thread: Event Received");
+                tracing::debug!("uia_thread: Event Received");
 
                 // ゲームなど起きるIME変更の遅延の対策
                 for i in 0..3 {

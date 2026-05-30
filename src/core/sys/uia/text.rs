@@ -84,7 +84,7 @@ impl<'a> InputMode<'a> {
             // 他のアイコンは無視
             // どうやらキーボードレイアウトの情報は同じ場所に入るらしくENG のように取得されている
             _ => {
-                log::debug!("Unknown IME Glyph detected: {:?}", glyph_cow);
+                tracing::debug!("Unknown IME Glyph detected: {:?}", glyph_cow);
                 // 文字列の最初の1文字を取り出して文字コードを確認
                 if let Some(c) = glyph_cow.chars().next() {
                     // Unicodeの私的領域の範囲かチェック

@@ -1,5 +1,5 @@
-use anyhow::Context;
 use crate::ui::prelude::*;
+use anyhow::Context;
 
 pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     // ユニークな名前でMutexを作成
@@ -14,7 +14,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     // 親プロセスの監視スレッドを開始
     let pid = parent_pid.context("Parent pid not found")?;
     spawn_parent_monitor(pid);
-    log::info!("Spawn parent monitor successful");
+    tracing::info!("Spawn parent monitor successful");
 
     let options = WindowOptions {
         focus: true,
@@ -33,10 +33,10 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
 
             if let Err(e) = cx.open_window(options, |w, cx| {
                 let s_v = cx.new(|cx| SettingsWindow::new(w, cx));
-                log::info!("Create SettingsWindow successful");
+                tracing::info!("Create SettingsWindow successful");
                 cx.new(|cx| {
                     let root = Root::new(s_v, w, cx);
-                    log::info!("Create Root successful");
+                    tracing::info!("Create Root successful");
 
                     cx.on_next_frame(w, |_, w, cx| {
                         cx.observe_window_appearance(w, |_, w, cx| {
@@ -54,20 +54,33 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                         match win_style::get_hwnd(&w) {
                             Ok(hwnd) => {
                                 if let Err(e) = win_style::set_always_on_top(hwnd, true) {
-                                    log::warn!("Failed to set always on top: {:?}", e);
+                                    tracing::warn!("Failed to set always on top: {:?}", e);
                                 };
                             }
-                            Err(e) => log::warn!("Failed to get HWND: {:?}", e),
+                            Err(e) => tracing::warn!("Failed to get HWND: {:?}", e),
                         }
                     });
                     root
                 })
             }) {
-                log::error!("Faild to open window{:?}", e);
+                tracing::error!("Faild to open window{:?}", e);
             };
+
+            let cfg_clone = AppConfig::global(cx).clone();
+            // アプリケーション終了時のコールバックを登録
+            cx.on_app_quit(move |_| {
+                let cfg = cfg_clone.clone();
+                async move {
+                    tracing::info!("App is quitting, performing final save...");
+                    if let Err(e) = config::save_config(&cfg) {
+                        tracing::error!(error = ?e, "Final save failed on quit: {:#?}", e);
+                    }
+                }
+            })
+            .detach();
         });
 
-    log::info!("Build Application successful");
+    tracing::info!("Build Application successful");
     Ok(())
 }
 
@@ -83,7 +96,7 @@ fn spawn_parent_monitor(parent_pid: u32) {
                         let mut exit_code: u32 = 0;
                         // 259 = STILL_ACTIVE
                         if GetExitCodeProcess(h, &mut exit_code).is_err() || exit_code != 259 {
-                            log::warn!("Parent Process Terminated");
+                            tracing::warn!("Parent Process Terminated");
                             break;
                         }
                         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -91,7 +104,7 @@ fn spawn_parent_monitor(parent_pid: u32) {
                     let _ = CloseHandle(h);
                 }
                 Err(e) => {
-                    log::error!("Failed to get parent process handle: {:?}", e);
+                    tracing::warn!("Failed to get parent process handle: {:?}", e);
                 }
             }
         }

@@ -119,7 +119,7 @@ impl ProcessList {
                             .unwrap_or(PolicyMode::BlackList);
 
                         AppConfig::global_mut(cx).process_cfg.mode = mode;
-                        let _ = config::save_config(AppConfig::global(cx));
+                        config::request_config_save(AppConfig::global(cx).clone());
                         p.update(cx, |_, cx| {
                             cx.notify();
                         });

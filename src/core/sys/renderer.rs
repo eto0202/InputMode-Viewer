@@ -114,7 +114,7 @@ impl DCompRenderer {
             let d2d_device = d2d_factory.CreateDevice(&dxgi_device)?;
             let d2d_context = d2d_device.CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)?;
 
-            log::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
+            tracing::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
             (
                 d3d_device,
                 dxgi_device,
@@ -139,7 +139,7 @@ impl DCompRenderer {
             dcomp_visual.SetEffect(&dcomp_effect_group)?;
             dcomp_target.SetRoot(&dcomp_visual)?;
 
-            log::info!("DirectComposition OK");
+            tracing::info!("DirectComposition OK");
 
             (dcomp_device, dcomp_target, dcomp_visual, dcomp_effect_group)
         };
@@ -174,7 +174,7 @@ impl DCompRenderer {
             let lw = metrics.width + style.padding * 2.0;
             let lh = metrics.height + style.padding * 2.0;
 
-            log::info!("Typography (DirectWrite) OK");
+            tracing::info!("Typography (DirectWrite) OK");
 
             (dw_factory, format, lw, lh)
         };
@@ -236,13 +236,13 @@ impl DCompRenderer {
             let dpi = (scale * 96.0) as f32;
             d2d_context.SetDpi(dpi, dpi);
 
-            log::info!("Presentation (SwapChain, Brushes) OK");
+            tracing::info!("Presentation (SwapChain, Brushes) OK");
 
             (swap_chain, waitable_object, font_brush, bg_brush)
         };
 
         unsafe { dcomp_device.Commit() }?;
-        log::info!("Commit OK");
+        tracing::info!("Commit OK");
 
         let renderer = Self {
             d3d_device,
@@ -288,7 +288,7 @@ impl DCompRenderer {
                     // 成功したときだけ、現在のモードを書き換える
                     self.current_alpha_mode = new_mode;
                 } else {
-                    log::error!("Failed to recreate swap chain");
+                    tracing::error!("Failed to recreate swap chain");
                     return Ok(());
                 }
             }
@@ -631,7 +631,7 @@ impl DCompRenderer {
         style: &WindowStyle,
         scale: f64,
     ) -> anyhow::Result<()> {
-        log::info!("Recreate swapchain");
+        tracing::info!("Recreate swapchain");
         unsafe {
             self.d2d_context.SetTarget(None);
             // waitable_object を閉じる
@@ -696,12 +696,12 @@ impl DCompRenderer {
             self.dcomp_visual.SetContent(&self.swap_chain)?;
             self.dcomp_device.Commit()?;
         }
-        log::info!("Recreate swapchain successful");
+        tracing::info!("Recreate swapchain successful");
         Ok(())
     }
 
     pub fn request_alpha_mode(&mut self, transparent: bool) {
-        log::info!("Request alpha mode");
+        tracing::info!("Request alpha mode");
         let mode = if transparent {
             D2D1_ALPHA_MODE_PREMULTIPLIED
         } else {
@@ -710,7 +710,7 @@ impl DCompRenderer {
 
         // 現在のモードと違う場合だけ、作り直しを予約する
         if self.current_alpha_mode != mode {
-            log::info!(
+            tracing::info!(
                 "current: {:?} -> changed: {:?}",
                 self.current_alpha_mode,
                 mode

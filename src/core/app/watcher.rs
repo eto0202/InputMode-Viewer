@@ -21,7 +21,7 @@ pub fn spawn_config_watcher(
                 }
             }
         }
-        Err(e) => log::error!("notify recommended_watcher Error: {:?}", e),
+        Err(e) => tracing::error!("notify recommended_watcher Error: {:?}", e),
     })?;
 
     watcher.watch(&parent_dir, notify::RecursiveMode::NonRecursive)?;

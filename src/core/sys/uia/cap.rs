@@ -43,7 +43,7 @@ pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) 
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_cap_monitor(&proxy, &rx) {
-            log::warn!("Cap Monitor Error: {:?}. Restarting...", e);
+            tracing::warn!("Cap Monitor Error: {:?}. Restarting...", e);
             std::thread::sleep(std::time::Duration::from_secs(3));
         }
     });
@@ -67,7 +67,7 @@ fn run_cap_monitor(
                 if processed.elapsed() < std::time::Duration::from_millis(200) {
                     continue;
                 }
-                log::debug!("cap_thread: Event Received");
+                tracing::debug!("cap_thread: Event Received");
                 // 遅延対策
                 for i in 0..3 {
                     // 入力可能性を取得
@@ -124,7 +124,7 @@ fn input_capability(
         (has_text_pattern, control_type)
     };
 
-    log::debug!("control type: {:?}", control_type);
+    tracing::debug!("control type: {:?}", control_type);
 
     #[allow(non_upper_case_globals)]
     let cap = match control_type {

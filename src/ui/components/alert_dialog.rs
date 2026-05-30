@@ -71,7 +71,7 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
                                             AppConfig::global_mut(cx).administrator = this.cur_admin;
                                             AppConfig::global_mut(cx).startup = this.cur_start;
 
-                                            let _ = config::save_config(AppConfig::global(cx));
+                                            config::request_config_save(AppConfig::global(cx).clone());
                                         });
                                     }
 

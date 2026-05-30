@@ -26,10 +26,10 @@ impl AppCore {
         let p_size = PhysicalSize::new(v_screen.cx as f32, v_screen.cy as f32);
 
         let mw = MainWindow::new(el, guard.active_role, p_pos, p_size)?;
-        log::info!("Create ManagedWindow successful");
+        tracing::info!("Create ManagedWindow successful");
 
         win_style::set_window_style(mw.hwnd)?;
-        log::info!("Set window style successful");
+        tracing::info!("Set window style successful");
 
         let (renderer, _w, _h) = DCompRenderer::new(
             mw.hwnd,
@@ -39,12 +39,12 @@ impl AppCore {
             guard.transparent,
         )
         .context("DCompRenderer Initialize Failed")?;
-        log::info!("Create DCompRenderer successful");
+        tracing::info!("Create DCompRenderer successful");
 
 
         // トレイアイコン
         let tray_icon = tray::tray_icon()?;
-        log::info!("Create tray icon successful");
+        tracing::info!("Create tray icon successful");
 
         Ok(Self { cfg, tray_icon, mw, renderer })
     }
