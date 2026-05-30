@@ -107,6 +107,14 @@ fn run_positon_thread(
 
     register_rawinput_devices()?;
 
+    // 初回起動時に一度だけ位置合わせ
+    let init_cfg = cfg_swap.load();
+    let mut current_pt = POINT::default();
+    unsafe {
+        GetCursorPos(&mut current_pt)?;
+    }
+    update_position(&shared, &init_cfg, &renderer, current_pt)?;
+
     loop {
         let cfg = cfg_swap.load();
         let displayed = shared.displayed.load(Ordering::Relaxed);
@@ -264,10 +272,10 @@ fn update_position(
     Ok(())
 }
 
-struct RoGuard;
+pub struct RoGuard;
 
 impl RoGuard {
-    fn new(init_type: RO_INIT_TYPE) -> windows::core::Result<Self> {
+    pub fn new(init_type: RO_INIT_TYPE) -> windows::core::Result<Self> {
         unsafe {
             // RoInitialize は成功すると S_OK (0) か S_FALSE (1) を返す
             RoInitialize(init_type)?;

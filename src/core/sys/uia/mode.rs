@@ -55,14 +55,14 @@ fn run_monitor_loop(
 
                     // 前回と違うモードが取れたら、即座に送信して終了
                     if cur_mode != mode {
-                        proxy.send_event(Message::Mode(cur_mode))?;
+                        proxy.send_event(Message::Mode(cur_mode.clone()))?;
                         mode = cur_mode;
                         break;
                     }
 
                     // 3回目の試行なら、同じ値でもキー入力があった事実として送る
                     if i == 2 {
-                        proxy.send_event(Message::Mode(mode))?;
+                        proxy.send_event(Message::Mode(mode.clone()))?;
                     }
 
                     std::thread::sleep(std::time::Duration::from_millis(10));

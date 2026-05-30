@@ -216,7 +216,7 @@ impl DCompRenderer {
             // 1作り直し予約があるかチェック
             if let Some(new_mode) = self.pending_alpha_recreation.take() {
                 if self
-                    .recreate_swapchain(transparent, mode, style, scale)
+                    .recreate_swapchain(transparent, mode.clone(), style, scale)
                     .is_ok()
                 {
                     // 成功したときだけ、現在のモードを書き換える
@@ -259,11 +259,13 @@ impl DCompRenderer {
         }
 
         // 背景を角丸矩形で描画
+        // 極端な縦長を防ぐ
+        let right = if w < h { h } else { w };
         let rounded_rect = D2D1_ROUNDED_RECT {
             rect: D2D_RECT_F {
                 left: 0.0,
                 top: 0.0,
-                right: w,
+                right,
                 bottom: h,
             },
             radiusX: 2.0, // 角丸の半径
@@ -275,7 +277,7 @@ impl DCompRenderer {
         let text_rect = D2D_RECT_F {
             left: p,
             top: p,
-            right: w - p,
+            right: right - p,
             bottom: h - p,
         };
 
@@ -325,6 +327,7 @@ impl DCompRenderer {
             self.d2d_context.SetTarget(None);
 
             // バッファのリサイズ
+            let w = if w < h { h } else { w };
             self.swap_chain
                 .ResizeBuffers(
                     0, // 0 = 現在のバッファ数(2)を維持
@@ -365,20 +368,13 @@ impl DCompRenderer {
                 CloseHandle(self.waitable_object)?;
             }
 
-            let str = mode.as_str(style.text_format);
-            let text: Vec<u16> = str.encode_utf16().chain(std::iter::once(0)).collect();
-            let text_layout =
-                self.dw_factory
-                    .CreateTextLayout(&text, &self.format, f32::MAX, f32::MAX)?;
-
-            let mut metrics: DWRITE_TEXT_METRICS = Default::default();
-            text_layout.GetMetrics(&mut metrics)?;
+            let metrics = self.calc_metrics(mode, style.text_format)?;
 
             let lw = metrics.width + style.padding * 2.0;
             let lh = metrics.height + style.padding * 2.0;
 
-            let pw = (lw * scale as f32) as u32;
-            let ph = (lh * scale as f32) as u32;
+            let pw = (lw * scale as f32).ceil() as u32;
+            let ph = (lh * scale as f32).ceil() as u32;
 
             // 新しいスワップチェーンの作成
             let new_swap_chain =
@@ -390,6 +386,7 @@ impl DCompRenderer {
                 .GetFrameLatencyWaitableObject();
 
             // Visual のサイズと中身を更新
+            let lw = if lw < lh { lh } else { lw };
             self.sprite_visual.SetSize(Vector2 { X: lw, Y: lh })?;
 
             connect_swap_chain_to_visual(&self.compositor, &self.sprite_visual, &self.swap_chain)?;
@@ -545,11 +542,11 @@ impl DCompRenderer {
             let text_layout =
                 self.dw_factory
                     .CreateTextLayout(&text, &self.format, f32::MAX, f32::MAX)?;
-
             text_layout.GetMetrics(&mut metrics)?;
         };
 
-        // DIP単位での幅と高さが取得できる
+        log::debug!("current text: {:?} current metrics: {:#?}", mode, metrics);
+
         Ok(metrics)
     }
 
@@ -757,6 +754,7 @@ fn create_swap_chain(
         DXGI_ALPHA_MODE_IGNORE
     };
 
+    let width = if width < height { height } else { width };
     let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
         Width: width,                       // 画面の幅
         Height: height,                     // 画面の高さ

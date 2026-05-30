@@ -1,6 +1,4 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 
@@ -12,7 +10,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Cap(InputCapability), // 入力可能性
     Mode(InputMode),      // 入力タイプ
@@ -116,12 +114,13 @@ impl Controller {
 
         let cfg = self.cfg.as_ref().context("AppCore missing")?;
         let v_screen = self.state.shared.v_screen.load();
-        let core = AppCore::new(el, cfg.clone(), self.state.mode, v_screen)?;
+        let core = AppCore::new(el, cfg.clone(), self.state.mode.clone(), v_screen)?;
         log::info!("AppCore initialized");
 
         // マウス監視スレッドの起動
         if self.position_thread_tx.is_none() {
-            let pos_ctrl = spawn_position_thread(&core, &self.state).expect("Failed to spawn thread");
+            let pos_ctrl =
+                spawn_position_thread(&core, &self.state).expect("Failed to spawn thread");
 
             self.position_thread_tx = Some(pos_ctrl);
             log::info!("Position tracking thread spawned.");
@@ -154,7 +153,7 @@ impl Controller {
 
     fn redraw_requested(&mut self) -> anyhow::Result<()> {
         let core = self.core.as_mut().context("AppCore Missing")?;
-        let mode = self.state.mode;
+        let mode = self.state.mode.clone();
         let metrics = handle_redraw_requested(core, &self.state, mode)?;
         self.state.shared.metrics.store(Arc::new(metrics));
         Ok(())
@@ -178,7 +177,7 @@ impl Controller {
             Message::Mode(mode) => {
                 // モードが変化した時に、ウィンドウサイズを再計算
                 if self.state.mode != mode {
-                    resize_request(mode, core)?;
+                    resize_request(mode.clone(), core)?;
                     self.state.refresh_requested = true;
                 }
                 self.state.mode = mode;
@@ -410,9 +409,11 @@ pub fn apply_config_to_all(
     // Rendererのリソース（色、フォント）を更新
     core.renderer.request_alpha_mode(cfg.transparent);
     core.renderer
-        .update_config(style, cfg.transparent, state.mode, scale)?;
+        .update_config(style, cfg.transparent, state.mode.clone(), scale)?;
     // サイズの再計算とリサイズ
-    let metrics = core.renderer.calc_metrics(state.mode, style.text_format)?;
+    let metrics = core
+        .renderer
+        .calc_metrics(state.mode.clone(), style.text_format)?;
     let p = style.padding;
     let p_size = PhysicalSize::new(
         (metrics.width + p * 2.0).ceil(),
@@ -423,12 +424,7 @@ pub fn apply_config_to_all(
         .resize(p_size.width as u32, p_size.height as u32, scale)?;
 
     // テキスト更新
-    let (w, h) = (
-        metrics.width + style.padding * 2.0,
-        metrics.height + style.padding * 2.0,
-    );
-    core.renderer
-        .draw(state.mode, style, w, h, scale, cfg.transparent)?;
+    handle_redraw_requested(core, state, state.mode.clone())?;
 
     Ok(())
 }
@@ -439,7 +435,7 @@ fn handle_redraw_requested(
     mode: InputMode,
 ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
     let style = AppCore::get_style(&core.cfg, core.mw.role)?;
-    let metrics = core.renderer.calc_metrics(mode, style.text_format)?;
+    let metrics = core.renderer.calc_metrics(mode.clone(), style.text_format)?;
     let (w, h) = (
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,

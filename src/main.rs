@@ -1,10 +1,10 @@
 #![windows_subsystem = "windows"]
 use input_mode_viewer::{
-    core::{sys::new_renderer::init_dispatcher_queue, utils},
+    core::{app::mouse_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue, utils},
     run::app_run,
 };
 use windows::Win32::{
-    System::WinRT::{RO_INIT_SINGLETHREADED, RoInitialize},
+    System::WinRT::{RO_INIT_SINGLETHREADED},
     UI::{
         HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext},
         WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
@@ -13,10 +13,8 @@ use windows::Win32::{
 use windows_core::{HSTRING, w};
 
 // TODO
-// デバック画面を実装し、未設定のグリフ、ログファイルを表示
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
-// Compactモード時に余白が大きすぎる問題と画面からはみ出る問題
 // 表示時にタスクバーの反応が悪い？
 // 最前面に不具合
 // モニターサイズからトレイメニュー付近を指定
@@ -34,9 +32,9 @@ fn main() -> anyhow::Result<()> {
 
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        // COMの初期化 (WinRT用)
-        RoInitialize(RO_INIT_SINGLETHREADED)?;
     }
+    // COMの初期化 (WinRT用)
+    let _guard = RoGuard::new(RO_INIT_SINGLETHREADED)?;
     // DispatcherQueueの初期化
     let _queue_controller = init_dispatcher_queue()?;
 
