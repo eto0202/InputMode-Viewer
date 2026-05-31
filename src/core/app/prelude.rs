@@ -57,11 +57,12 @@ pub use windows::Win32::{
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
         Input::{RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RegisterRawInputDevices},
+        Shell::ShellExecuteW,
         WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos, GetSystemMetrics,
             HWND_MESSAGE, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
             PeekMessageW, QS_POSTMESSAGE, QS_RAWINPUT, RegisterClassExW, SM_CXVIRTUALSCREEN,
-            SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WINDOW_EX_STYLE,
+            SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_SHOW, WINDOW_EX_STYLE,
             WINDOW_STYLE, WM_INPUT, WNDCLASSEXW,
         },
     },
@@ -75,4 +76,4 @@ pub use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-pub use windows_core::w;
+pub use windows_core::{HSTRING, w};

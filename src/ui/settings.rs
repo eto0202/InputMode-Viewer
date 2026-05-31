@@ -66,13 +66,12 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                 tracing::error!("Faild to open window{:?}", e);
             };
 
-            let cfg_clone = AppConfig::global(cx).clone();
             // アプリケーション終了時のコールバックを登録
-            cx.on_app_quit(move |_| {
-                let cfg = cfg_clone.clone();
+            cx.on_app_quit(move |cx| {
+                let cfg_clone = AppConfig::global(cx).clone();
                 async move {
                     tracing::info!("App is quitting, performing final save...");
-                    if let Err(e) = config::save_config(&cfg) {
+                    if let Err(e) = config::save_config(&cfg_clone) {
                         tracing::error!(error = ?e, "Final save failed on quit: {:#?}", e);
                     }
                 }

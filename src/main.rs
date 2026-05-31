@@ -1,7 +1,8 @@
 #![windows_subsystem = "windows"]
 use anyhow::Context;
+use directories::ProjectDirs;
 use input_mode_viewer::{
-    core::{app::mouse_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue, utils},
+    core::{app::mouse_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue},
     run::app_run,
 };
 use windows::Win32::{
@@ -13,6 +14,10 @@ use windows::Win32::{
 };
 use windows_core::{HSTRING, w};
 
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
 // TODO
 // キャレット座標は管理者権限なら取得できるかも
 // IUIAutomationTextPattern2::GetCaretRangeで取得できるかも
@@ -23,10 +28,9 @@ use windows_core::{HSTRING, w};
 // positon_threadがエラー落ちした時、core.renderer.get_controller() から作り直した新しいコントローラーを渡す
 // メインスレッドも自動復旧するように
 // リスタート時や復旧時に通知を出す
-// on_app_quit が動いていないっぽい
 
 fn main() -> anyhow::Result<()> {
-    let _log_guard = utils::init_logger()?;
+    let _log_guard = init_logger()?;
     // 起動時の環境情報を入れる
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -64,6 +68,42 @@ fn main() -> anyhow::Result<()> {
     }
     tracing::info!("Application exited gracefully");
     Ok(())
+}
+
+pub fn init_logger() -> anyhow::Result<WorkerGuard> {
+    // 保存先
+    let proj_dirs = ProjectDirs::from("com", "", "InputMode-Viewer")
+        .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
+    let log_dir = proj_dirs.data_local_dir().join("logs");
+
+    // ディレクトリがない場合は作成しておく
+    std::fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
+
+    // ファイル出力の設定
+    // ファイル名のプレフィックスなどを設定
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "app.log");
+
+    // 非ブロックで書き込む
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    // ロガーの組み立て
+    tracing_subscriber::registry()
+        // ログレベルの設定
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        // コンソール出力（標準出力）
+        .with(fmt::layer().with_writer(std::io::stdout))
+        // ファイル出力
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false) // ファイルには色コードを入れない
+                .with_target(true) // どのモジュールからのログか表示
+                .with_thread_ids(true), // スレッドIDを表示
+        )
+        .with(ErrorLayer::default())
+        .init();
+
+    Ok(guard)
 }
 
 // パニックが起きた時に、自動的に tracing::error! に流す

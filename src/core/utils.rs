@@ -1,11 +1,6 @@
 use anyhow::Context;
-use check_elevation::is_elevated;
-use directories::ProjectDirs;
-
-use tracing_appender::non_blocking::WorkerGuard;
-use tracing_error::ErrorLayer;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use std::{collections::HashSet, path::Path};
+use tracing::instrument;
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, HWND, INVALID_HANDLE_VALUE, MAX_PATH},
     System::{
@@ -18,48 +13,8 @@ use windows::Win32::{
             QueryFullProcessImageNameW,
         },
     },
-    UI::{
-        Shell::ShellExecuteW,
-        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId, SW_SHOW},
-    },
+    UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
 };
-use windows_core::{HSTRING, w};
-
-pub fn init_logger() -> anyhow::Result<WorkerGuard> {
-    // 保存先
-    let proj_dirs = ProjectDirs::from("com", "", "InputMode-Viewer")
-        .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
-    let log_dir = proj_dirs.data_local_dir().join("logs");
-
-    // ディレクトリがない場合は作成しておく
-    std::fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
-
-    // ファイル出力の設定
-    // ファイル名のプレフィックスなどを設定
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "app.log");
-
-    // 非ブロックで書き込む
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-
-    // ロガーの組み立て
-    tracing_subscriber::registry()
-        // ログレベルの設定
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")))
-        // コンソール出力（標準出力）
-        .with(fmt::layer().with_writer(std::io::stdout))
-        // ファイル出力
-        .with(
-            fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false) // ファイルには色コードを入れない
-                .with_target(true) // どのモジュールからのログか表示
-                .with_thread_ids(true), // スレッドIDを表示
-        )
-        .with(ErrorLayer::default())
-        .init();
-
-    Ok(guard)
-}
 
 // メモリ上のバイト列から画像をデコードしアイコンを生成
 // アプリケーション内に画像が保存される
@@ -73,63 +28,40 @@ pub fn load_icon(to_include_bytes: &[u8]) -> tray_icon::Icon {
     tray_icon::Icon::from_rgba(rgba, width, height).unwrap()
 }
 
-pub fn restart_application(dropping_privileges: bool) {
-    // 自らの実行ファイルパスを取得
-    let exe_path = std::env::current_exe().expect("Failed to get exe path");
-
-    let result = if dropping_privileges {
-        let quoted_path = format!("\"{}\"", exe_path.display());
-        let args_str = HSTRING::from(quoted_path);
-        unsafe {
-            ShellExecuteW(
-                None,
-                w!("open"),
-                w!("explorer.exe"), // 実行ファイルはエクスプローラーにし普通権限で再起動
-                &args_str,
-                None,
-                SW_SHOW,
-            )
-        }
-    } else {
-        let exe_path_str = HSTRING::from(exe_path.as_os_str());
-        let args_str = HSTRING::from("");
-        unsafe { ShellExecuteW(None, None, &exe_path_str, &args_str, None, SW_SHOW) }
-    };
-
-    if result.0 as usize > 32 {
-        tracing::info!("Restart process spawned successfully. Exiting current process.");
-        std::process::exit(0);
-    } else {
-        tracing::error!(
-            "Failed to restart application via ShellExecuteW: {:?}",
-            result
-        );
-    }
-}
-
+#[instrument]
 pub fn elevated_check() -> bool {
-    let current_is_elevated = is_elevated().unwrap_or(false);
+    let current_is_elevated = check_elevation::is_elevated().unwrap_or(false);
     tracing::info!(
-        "Administrator: {:?}",
-        if current_is_elevated { "TRUE" } else { "FALSE" }
+        is_admin = current_is_elevated,
+        "Checked process elevation status"
     );
 
     current_is_elevated
 }
 
 // 与えられたリストの要素が実行中プロセス一覧に含まれているか否か
+#[instrument(skip(black_or_white))]
 pub fn included_in_running_process(black_or_white: &HashSet<String>) -> anyhow::Result<bool> {
     let process_set = get_focused_process_and_children_names()
-        .context("Failed to get focused process and children names")?;
+        .context("Failed to identify focused process and its children")?;
 
-    Ok(process_set.iter().any(|name| black_or_white.contains(name)))
+    let is_included = process_set.iter().any(|name| black_or_white.contains(name));
+    tracing::debug!(
+        is_included,
+        "Checked if focused process is in the filter list"
+    );
+
+    Ok(is_included)
 }
 
 // 現在フォーカスされているプロセスとその子プロセス名をHashSetに
-fn get_focused_process_and_children_names() -> Option<HashSet<String>> {
-    let (parent_name, parent_pid) = get_foreground_process_name()?;
+#[instrument]
+fn get_focused_process_and_children_names() -> anyhow::Result<HashSet<String>> {
+    let (parent_name, parent_pid) =
+        get_foreground_process_name().context("Could not get foreground process info")?;
 
-    let h_snapshot = create_process_snapshot()?;
+    let h_snapshot = create_process_snapshot()
+        .context("Failed to capture system process snapshot for child search")?;
 
     let mut set = HashSet::new();
     set.insert(parent_name); // 親自身の名前も判定対象に
@@ -159,26 +91,30 @@ fn get_focused_process_and_children_names() -> Option<HashSet<String>> {
         }
         let _ = CloseHandle(h_snapshot);
     }
-    Some(set)
+    tracing::debug!(
+        count = set.len(),
+        "Retrieved focused process and its children"
+    );
+    Ok(set)
 }
 
 // 現在フォーカスされているプロセスの名前とidを取得
-fn get_foreground_process_name() -> Option<(String, u32)> {
+#[instrument]
+fn get_foreground_process_name() -> anyhow::Result<(String, u32)> {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd == HWND::default() {
-            return None;
+            anyhow::bail!("No foreground window detected");
         }
 
         let mut pid: u32 = 0;
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
         if pid == 0 {
-            return None;
+            anyhow::bail!("Failed to retrieve process ID for the foreground window");
         }
 
-        let Ok(h_process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-            return None;
-        };
+        let h_process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+            .with_context(|| format!("Failed to open process with PID: {}", pid))?;
 
         // 実行ファイルのフルパスを取得
         let mut buffer = [0u16; MAX_PATH as usize];
@@ -195,44 +131,52 @@ fn get_foreground_process_name() -> Option<(String, u32)> {
         if result.is_ok() {
             // パス全体からファイル名のみを抽出
             let full_path = String::from_utf16_lossy(&buffer[..size as usize]);
-            let file_name = Path::new(&full_path).file_name()?.to_str()?.to_lowercase(); // 小文字に統一
+            let file_name = Path::new(&full_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .context("Failed to extract file name from process path")?
+                .to_lowercase(); // 小文字に統一
 
-            Some((file_name, pid))
+            Ok((file_name, pid))
         } else {
-            None
+            anyhow::bail!("Failed to query image name for PID: {}", pid);
         }
     }
 }
 
 // GUIに表示されるプロセス一覧
+#[instrument]
 pub fn get_running_process_names() -> anyhow::Result<Vec<String>> {
-    let h_snapshot = create_process_snapshot().context("Not found process snapshot")?;
-    let set = create_process_set(h_snapshot)?;
+    let h_snapshot =
+        create_process_snapshot().context("Failed to capture system process snapshot")?;
+    let set =
+        create_process_set(h_snapshot).context("Failed to build process name set from snapshot")?;
     unsafe {
         let _ = CloseHandle(h_snapshot);
     }
     let vec = set_to_vec(set);
+
+    tracing::info!(
+        process_count = vec.len(),
+        "Retrieved all running process names"
+    );
     Ok(vec)
 }
 
-fn create_process_snapshot() -> Option<HANDLE> {
-    let h_snapshot = unsafe {
-        match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
-            Ok(h) => h,
-            Err(e) => {
-                tracing::error!("Failed to create a snapshot: {:?}", e);
-                return None;
-            }
+fn create_process_snapshot() -> anyhow::Result<HANDLE> {
+    unsafe {
+        let h_snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            .context("Win32 API: CreateToolhelp32Snapshot failed")?;
+        if h_snapshot == INVALID_HANDLE_VALUE {
+            anyhow::bail!("CreateToolhelp32Snapshot returned an invalid handle");
         }
-    };
-    if h_snapshot == INVALID_HANDLE_VALUE {
-        return None;
-    }
 
-    Some(h_snapshot)
+        Ok(h_snapshot)
+    }
 }
 
 // 全プロセス名のHashSetを作成
+#[instrument(skip(h_snapshot))]
 fn create_process_set(h_snapshot: HANDLE) -> anyhow::Result<HashSet<String>> {
     // エントリーの初期化
     let mut entry = PROCESSENTRY32W {
@@ -243,6 +187,7 @@ fn create_process_set(h_snapshot: HANDLE) -> anyhow::Result<HashSet<String>> {
 
     unsafe {
         // 最初のプロセスを取得
+        // // ここで失敗するのはスナップショットが不正かOSレベルの異常
         if Process32FirstW(h_snapshot, &mut entry).is_ok() {
             loop {
                 let name = String::from_utf16_lossy(&entry.szExeFile)
@@ -258,7 +203,21 @@ fn create_process_set(h_snapshot: HANDLE) -> anyhow::Result<HashSet<String>> {
                     break;
                 }
             }
+        } else {
+            // 最初のプロセスすら取得できない場合はエラー
+            anyhow::bail!("Failed to retrieve the first process from the snapshot");
         }
+    }
+
+    if names.is_empty() {
+        // リストが空なのは不自然（自分自身は動いているはず）
+        tracing::warn!("Process list is empty. This may indicate an issue with snapshot access.");
+    } else {
+        // 取得した個数をデバッグログに残す
+        tracing::debug!(
+            count = names.len(),
+            "Successfully extracted process names from snapshot"
+        );
     }
 
     Ok(names)

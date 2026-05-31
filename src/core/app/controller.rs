@@ -12,9 +12,9 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Cap(InputCapability), // 入力可能性
-    Mode(InputMode<'static>),      // 入力タイプ
-    ConfigUpdated,        // 設定更新
+    Cap(InputCapability),     // 入力可能性
+    Mode(InputMode<'static>), // 入力タイプ
+    ConfigUpdated,            // 設定更新
 }
 
 pub struct AppState {
@@ -435,7 +435,9 @@ fn handle_redraw_requested(
     mode: InputMode,
 ) -> anyhow::Result<DWRITE_TEXT_METRICS> {
     let style = AppCore::get_style(&core.cfg, core.mw.role)?;
-    let metrics = core.renderer.calc_metrics(mode.clone(), style.text_format)?;
+    let metrics = core
+        .renderer
+        .calc_metrics(mode.clone(), style.text_format)?;
     let (w, h) = (
         metrics.width + style.padding * 2.0,
         metrics.height + style.padding * 2.0,
@@ -476,7 +478,7 @@ fn wait_tray_event(el: &ActiveEventLoop) {
             tray::ID_RESTART => {
                 // 権限降格は行わずそのまま再起動
                 // もし管理者権限に変更があった場合、再起動時に昇格/降格処理が行われる
-                utils::restart_application(false);
+                restart_application(false);
             }
             tray::ID_SETTING => {
                 let _ = ui::spawn::spawn_settings_ui();
@@ -491,9 +493,9 @@ fn apply_admin_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
     if new_cfg.administrator != utils::elevated_check() {
         // 権限降格
         tracing::info!("Dropping privileges via explorer.exe...");
-        utils::restart_application(true);
+        restart_application(true);
     } else {
-        utils::restart_application(false);
+        restart_application(false);
     }
     Ok(())
 }
@@ -509,10 +511,44 @@ fn apply_startup_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
     } else if new_cfg.startup {
         // タスク登録（管理者権限が必要）のため昇格再起動が必要
         tracing::info!("Startup enabled in normal mode. Restarting for elevation...");
-        utils::restart_application(false);
+        restart_application(false);
     } else {
         tracing::info!("Startup disabled in normal mode. Restarting for elevation...");
-        utils::restart_application(false);
+        restart_application(false);
     }
     Ok(())
+}
+
+fn restart_application(dropping_privileges: bool) {
+    // 自らの実行ファイルパスを取得
+    let exe_path = std::env::current_exe().expect("Failed to get exe path");
+
+    let result = if dropping_privileges {
+        let quoted_path = format!("\"{}\"", exe_path.display());
+        let args_str = HSTRING::from(quoted_path);
+        unsafe {
+            ShellExecuteW(
+                None,
+                w!("open"),
+                w!("explorer.exe"), // 実行ファイルはエクスプローラーにし普通権限で再起動
+                &args_str,
+                None,
+                SW_SHOW,
+            )
+        }
+    } else {
+        let exe_path_str = HSTRING::from(exe_path.as_os_str());
+        let args_str = HSTRING::from("");
+        unsafe { ShellExecuteW(None, None, &exe_path_str, &args_str, None, SW_SHOW) }
+    };
+
+    if result.0 as usize > 32 {
+        tracing::info!("Restart process spawned successfully. Exiting current process.");
+        std::process::exit(0);
+    } else {
+        tracing::error!(
+            "Failed to restart application via ShellExecuteW: {:?}",
+            result
+        );
+    }
 }
