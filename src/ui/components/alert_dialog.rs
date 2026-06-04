@@ -1,4 +1,14 @@
-use crate::ui::prelude::*;
+use gpui::*;
+use gpui_component::{
+    ActiveTheme,
+    button::{Button, ButtonVariants},
+    dialog::{
+        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
+    },
+};
+
+use crate::{common::{self, AppConfig}, ui::SettingsWindow};
 
 pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) -> impl IntoElement {
     let close = entity.clone();
@@ -71,7 +81,7 @@ pub fn restart_alert_dialog(cx: &mut App, entity: WeakEntity<SettingsWindow>) ->
                                             AppConfig::global_mut(cx).administrator = this.cur_admin;
                                             AppConfig::global_mut(cx).startup = this.cur_start;
 
-                                            config::request_config_save(AppConfig::global(cx).clone());
+                                            common::request_config_save(AppConfig::global(cx).clone());
                                         });
                                     }
 

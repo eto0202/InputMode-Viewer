@@ -1,4 +1,10 @@
-use crate::ui::prelude::*;
+use gpui::*;
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::group_box::GroupBoxVariant;
+use gpui_component::setting::{SettingGroup, SettingPage, Settings};
+
+use crate::common::{self, AppConfig};
+use crate::ui::{Fixed, Floating, ProcessList, components};
 
 impl Global for AppConfig {}
 
@@ -24,7 +30,7 @@ pub struct SettingsWindow {
 
 impl SettingsWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let cfg = config::load_config();
+        let cfg = common::load_config();
 
         if !cx.has_global::<AppConfig>() {
             cx.set_global(cfg.clone());
@@ -61,12 +67,14 @@ impl Render for SettingsWindow {
                                 .default_open(true)
                                 .groups(vec![
                                     // グループ（メイン領域のセクション）
-                                    SettingGroup::new().title("General").items(general(
-                                        window,
-                                        cx,
-                                        self.cur_admin,
-                                        self.cur_start,
-                                    )),
+                                    SettingGroup::new().title("General").items(
+                                        components::general(
+                                            window,
+                                            cx,
+                                            self.cur_admin,
+                                            self.cur_start,
+                                        ),
+                                    ),
                                     SettingGroup::new()
                                         .title("Fixed")
                                         .items(Fixed::fixed(&mut self.fixed)),
@@ -87,7 +95,7 @@ impl Render for SettingsWindow {
             )
             .child({
                 if self.is_restart && !self.is_later {
-                    div().child(restart_alert_dialog(cx, entity))
+                    div().child(components::restart_alert_dialog(cx, entity))
                 } else {
                     div().size_0().invisible()
                 }
@@ -102,7 +110,7 @@ impl Render for SettingsWindow {
                                 AppConfig::global_mut(cx).administrator = cur_admin;
                                 AppConfig::global_mut(cx).startup = cur_start;
 
-                                config::request_config_save(AppConfig::global(cx).clone());
+                                common::request_config_save(AppConfig::global(cx).clone());
                             }),
                     )
                 } else {

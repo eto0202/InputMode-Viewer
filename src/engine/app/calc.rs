@@ -1,9 +1,24 @@
-use windows::Win32::UI::WindowsAndMessaging::{SM_CXSCREEN, SM_CYSCREEN};
+use anyhow::Context;
+use windows::Win32::{
+    Foundation::POINT,
+    Graphics::{
+        DirectWrite::DWRITE_TEXT_METRICS,
+        Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
+    },
+    UI::{
+        HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        WindowsAndMessaging::{
+            GetCursorPos, GetSystemMetrics, SM_CXSCREEN, SM_CXVIRTUALSCREEN, SM_CYSCREEN,
+            SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        },
+    },
+};
 
-use crate::{common::app_config::WindowPos, core::app::prelude::*};
+use crate::common::WindowPos;
 
 // 座標計算
-pub fn calc_predicted_potision(
+#[allow(dead_code)]
+fn calc_predicted_potision(
     current: POINT,
     mouse_x: i32,
     mouse_y: i32,
@@ -29,6 +44,7 @@ pub fn calc_predicted_potision(
 }
 
 // マウス位置の予測
+#[allow(dead_code)]
 pub fn set_predicted_position(
     mouse_x: i32,
     mouse_y: i32,

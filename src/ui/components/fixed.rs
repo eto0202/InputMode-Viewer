@@ -1,4 +1,18 @@
-use crate::{common::app_config::{TextFormat}, ui::prelude::*};
+use gpui::*;
+use gpui_component::{
+    ActiveTheme,
+    color_picker::{ColorPickerEvent, ColorPickerState},
+    input::{InputEvent, InputState, NumberInputEvent, StepAction},
+    setting::{NumberFieldOptions, SettingField, SettingItem},
+};
+
+use crate::{
+    common::{
+        self, AppConfig, AutoHide, D2d1ColorExt, DisplayStyle, GpuiColorExt, TextFormat, WindowPos,
+        WindowRole,
+    },
+    ui::{ColorPickerSettingItem, SettingsWindow, components},
+};
 
 pub struct Fixed {
     pub bg_color: Entity<ColorPickerState>,
@@ -10,6 +24,7 @@ pub struct Fixed {
     pub number_input_value: f32,
     pub number_input: Entity<InputState>,
 
+    #[allow(dead_code)]
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -39,7 +54,7 @@ impl Fixed {
 
                     this.fixed.bg_selected_color = *color;
 
-                    config::request_config_save(AppConfig::global(cx).clone());
+                    common::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe(&font_color, |this, _, e, cx| match e {
@@ -49,7 +64,7 @@ impl Fixed {
 
                     this.fixed.font_selected_color = *color;
 
-                    config::request_config_save(AppConfig::global(cx).clone());
+                    common::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe_in(
@@ -64,7 +79,7 @@ impl Fixed {
                         this.fixed.number_input_value = value;
 
                         AppConfig::global_mut(cx).fixed.auto_hide.time = value;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     }
                     InputEvent::Focus => {}
                     _ => {}
@@ -81,7 +96,7 @@ impl Fixed {
 
                             AppConfig::global_mut(cx).fixed.auto_hide.time =
                                 this.fixed.number_input_value;
-                            config::request_config_save(AppConfig::global(cx).clone());
+                            common::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -96,7 +111,7 @@ impl Fixed {
 
                             AppConfig::global_mut(cx).fixed.auto_hide.time =
                                 this.fixed.number_input_value;
-                            config::request_config_save(AppConfig::global(cx).clone());
+                            common::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -137,7 +152,7 @@ impl Fixed {
                     |cx: &App| AppConfig::global(cx).fixed.style.font_size.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.font_size = val as f32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.font_size),
@@ -170,10 +185,10 @@ impl Fixed {
                     |val: SharedString, cx: &mut App| {
                         let style = val
                             .as_str()
-                            .parse::<app_config::TextFormat>()
-                            .unwrap_or(app_config::TextFormat::Full);
+                            .parse::<TextFormat>()
+                            .unwrap_or(TextFormat::Full);
                         AppConfig::global_mut(cx).fixed.style.text_format = style;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.text_format.as_ref().to_string()),
@@ -199,7 +214,7 @@ impl Fixed {
                     |cx: &App| AppConfig::global(cx).fixed.style.padding.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.padding = val as f32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.padding),
@@ -217,7 +232,7 @@ impl Fixed {
                     |cx: &App| (AppConfig::global(cx).fixed.style.opacity * 100.0) as f64,
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.style.opacity = (val / 100.0) as f32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.style.opacity * 100.0),
@@ -241,7 +256,7 @@ impl Fixed {
                     |val: SharedString, cx: &mut App| {
                         let pos = val.as_str().parse::<WindowPos>().unwrap_or(WindowPos::Top);
                         AppConfig::global_mut(cx).fixed.pos = pos;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.pos.as_ref().to_string()),
@@ -259,7 +274,7 @@ impl Fixed {
                     |cx: &App| (AppConfig::global(cx).fixed.margin) as f64,
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).fixed.margin = val as i32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.margin),
@@ -286,7 +301,7 @@ impl Fixed {
                             .parse::<DisplayStyle>()
                             .unwrap_or(AppConfig::global(cx).fixed.display_style);
                         AppConfig::global_mut(cx).fixed.display_style = s;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().fixed.display_style.as_ref().to_string()),
@@ -298,7 +313,7 @@ impl Fixed {
                 let text_color = cx.theme().muted_foreground;
                 let border_color = cx.theme().border;
 
-                auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), app_config::WindowRole::Fixed)
+                components::auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), WindowRole::Fixed)
             })).description("Set the time (in seconds) before the window hides automatically. (Default 3)\nNote: This setting only applies when Visibility Mode is set to \"Smart\"."),
 
         ]

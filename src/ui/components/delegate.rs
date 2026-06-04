@@ -1,4 +1,9 @@
-use crate::ui::prelude::*;
+use gpui::*;
+use gpui_component::{Icon, IconName, IndexPath, button::Button, h_flex, list::{ListDelegate, ListItem, ListState}};
+
+use crate::common::{self, AppConfig, PolicyMode};
+
+
 
 pub struct ProcessListDelegate {
     all_items: Vec<String>,
@@ -73,7 +78,7 @@ impl ListDelegate for ProcessListDelegate {
                                         } else {
                                             config.process_cfg.whitelist.insert(name.as_str());
                                         }
-                                        config::request_config_save(config.clone());
+                                        common::request_config_save(config.clone());
                                     });
                                 }
                             }),
@@ -207,7 +212,7 @@ impl ListDelegate for CfgListDelegate {
                                         } else {
                                             config.process_cfg.whitelist.remove(name.as_str());
                                         }
-                                        config::request_config_save(config.clone());
+                                        common::request_config_save(config.clone());
                                     });
                                 }
                             }),

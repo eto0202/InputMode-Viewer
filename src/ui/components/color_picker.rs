@@ -1,4 +1,7 @@
-use crate::ui::prelude::*;
+use gpui::{prelude::FluentBuilder, *};
+use gpui_component::{ActiveTheme, Colorize, Sizable, color_picker::{ColorPicker, ColorPickerState}, h_flex, setting::{RenderOptions, SettingFieldElement}};
+
+
 
 pub struct ColorPickerSettingItem {
     color: Entity<ColorPickerState>,

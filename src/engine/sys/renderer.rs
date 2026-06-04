@@ -1,7 +1,3 @@
-use crate::{
-    common::app_config::{TextFormat, WindowStyle},
-    core::sys::uia::text::InputMode,
-};
 use anyhow::Context;
 use std::{f32, time::Duration};
 use windows::{
@@ -44,6 +40,11 @@ use windows::{
 };
 use windows_numerics::{Vector2, Vector3};
 
+use crate::{
+    common::{TextFormat, WindowStyle},
+    engine::InputMode,
+};
+
 #[derive(Debug)]
 pub struct DCompRenderer {
     // 基盤 (DirectX / Direct2D)
@@ -61,7 +62,9 @@ pub struct DCompRenderer {
 
     // WinRT Composition
     pub compositor: Compositor,
+    #[allow(dead_code)]
     pub desktop_target: DesktopWindowTarget,
+    #[allow(dead_code)]
     pub root_visual: ContainerVisual,
     pub sprite_visual: SpriteVisual,
 
@@ -420,6 +423,7 @@ impl DCompRenderer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_position(&self, x: f32, y: f32) -> anyhow::Result<()> {
         self.sprite_visual
             .SetOffset(Vector3 { X: x, Y: y, Z: 0.0 })?;
@@ -506,6 +510,7 @@ impl DCompRenderer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn mouse_expr_start(&self) -> anyhow::Result<()> {
         self.sprite_visual
             .StartAnimation(h!("Offset"), &self.mouse_expr)?;
@@ -513,6 +518,7 @@ impl DCompRenderer {
     }
 
     // マウス追従
+    #[allow(dead_code)]
     pub fn mouse_tracking(&self, tx: i32, ty: i32) -> anyhow::Result<()> {
         // 共有変数の値を更新
         self.property_set.InsertVector3(

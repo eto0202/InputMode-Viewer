@@ -1,9 +1,48 @@
-use crate::core::app::prelude::*;
+use anyhow::Context;
+use arc_swap::ArcSwap;
+use std::{
+    sync::{
+        Arc,
+        atomic::Ordering,
+        mpsc::{self, Receiver, Sender},
+    },
+    time::{Duration, Instant},
+};
+use windows::Win32::{
+    Foundation::{
+        CloseHandle, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WAIT_FAILED, WPARAM,
+    },
+    System::{
+        LibraryLoader::GetModuleHandleW,
+        Threading::{
+            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW,
+            GetCurrentThread, INFINITE, SetEvent, SetThreadPriority, SetWaitableTimer,
+            THREAD_PRIORITY_HIGHEST, TIMER_ALL_ACCESS, WaitForSingleObject,
+        },
+        WinRT::{RO_INIT_MULTITHREADED, RO_INIT_TYPE, RoInitialize, RoUninitialize},
+    },
+    UI::{
+        Input::{RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RegisterRawInputDevices},
+        WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos, HWND_MESSAGE, MSG,
+            MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW,
+            QS_POSTMESSAGE, QS_RAWINPUT, QUEUE_STATUS_FLAGS, RegisterClassExW, WINDOW_EX_STYLE,
+            WINDOW_STYLE, WM_INPUT, WNDCLASSEXW,
+        },
+    },
+};
+use windows_core::w;
+
+use crate::{
+    common::{AppConfig, RenderingQuality, WindowRole},
+    engine::{AppCore, AppState, RendererController, SharedState, app::calc},
+};
 
 // 通知用メッセージ
 #[derive(Debug)]
 pub enum ControlMessage {
     ResetPosition,
+    #[allow(dead_code)]
     Terminate,
     Refresh,
 }
@@ -152,7 +191,7 @@ fn run_positon_thread(
 
                     is_tracking = true;
                 }
-                ControlMessage::Terminate => {
+                _ => {
                     tracing::info!("Termination message received. Closing position thread.");
                     return Ok(());
                 }

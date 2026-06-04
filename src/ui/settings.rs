@@ -1,5 +1,20 @@
-use crate::ui::prelude::*;
 use anyhow::Context;
+use gpui::*;
+use gpui_component::{Root, Theme};
+use gpui_component_assets::Assets;
+use windows::Win32::{
+    Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE},
+    System::Threading::{
+        CreateMutexW, GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    },
+};
+use windows_core::PCWSTR;
+
+use crate::{
+    common::{self, AppConfig, ConfigTheme},
+    engine,
+    ui::SettingsWindow,
+};
 
 pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
     // ユニークな名前でMutexを作成
@@ -51,9 +66,9 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                         let mode = AppConfig::global(cx).cfg_theme;
                         mode.theme_change(cx);
 
-                        match win_style::get_hwnd(&w) {
+                        match engine::get_hwnd(&w) {
                             Ok(hwnd) => {
-                                if let Err(e) = win_style::set_always_on_top(hwnd, true) {
+                                if let Err(e) = engine::set_always_on_top(hwnd, true) {
                                     tracing::warn!("Failed to set always on top: {:?}", e);
                                 };
                             }
@@ -71,7 +86,7 @@ pub fn run(parent_pid: Option<u32>) -> anyhow::Result<()> {
                 let cfg_clone = AppConfig::global(cx).clone();
                 async move {
                     tracing::info!("App is quitting, performing final save...");
-                    if let Err(e) = config::save_config(&cfg_clone) {
+                    if let Err(e) = common::save_config(&cfg_clone) {
                         tracing::error!(error = ?e, "Final save failed on quit: {:#?}", e);
                     }
                 }

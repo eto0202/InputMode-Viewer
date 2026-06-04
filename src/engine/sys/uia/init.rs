@@ -1,10 +1,12 @@
-use crate::{core::sys::uia::text::InputMode, skip_err};
+
 use anyhow::Context;
 use std::sync::{Mutex, OnceLock};
 use windows::Win32::{
     System::Com::{CLSCTX_ALL, CoCreateInstance},
     UI::Accessibility::*,
 };
+
+use crate::{engine::InputMode, skip_err};
 
 // アプリ全体で共有されるUIA初期化用の鍵
 //  UIAの初期化は、複数のスレッドで同時に行うとクラッシュしたりバグったりするらしい

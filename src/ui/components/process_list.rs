@@ -1,4 +1,20 @@
-use crate::ui::prelude::*;
+use gpui::*;
+use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable,
+    button::Button,
+    h_flex,
+    input::{Input, InputEvent, InputState},
+    list::{List, ListState},
+    resizable::{h_resizable, resizable_panel},
+    setting::{SettingField, SettingItem},
+    v_flex,
+};
+
+use crate::{
+    common::{self, AppConfig, PolicyMode},
+    engine,
+    ui::{CfgListDelegate, ProcessListDelegate, SettingsWindow},
+};
 
 pub struct ProcessList {
     pub search_input: Entity<InputState>,
@@ -9,7 +25,7 @@ pub struct ProcessList {
 
 impl ProcessList {
     pub fn new(window: &mut Window, cx: &mut Context<SettingsWindow>) -> Self {
-        let vec = utils::get_running_process_names().unwrap_or_default();
+        let vec = engine::get_running_process_names().unwrap_or_default();
         let p_delegate = ProcessListDelegate::new(vec);
 
         let items = if AppConfig::global(cx).process_cfg.mode == PolicyMode::BlackList {
@@ -59,7 +75,7 @@ impl ProcessList {
         // 各リストは自分の状態しか知らないため( global_mut で中身を書き換えても他のリストは知らない)、
         // ここで AppConfig の変更を待ち構えて、update_global された場合に各リストのデータを更新する
         cx.observe_global::<AppConfig>(|this, cx| {
-            let new_items = utils::get_running_process_names().unwrap_or_default();
+            let new_items = engine::get_running_process_names().unwrap_or_default();
 
             let config = AppConfig::global(cx);
             let latest_items: Vec<String> = if config.process_cfg.mode == PolicyMode::BlackList {
@@ -119,7 +135,7 @@ impl ProcessList {
                             .unwrap_or(PolicyMode::BlackList);
 
                         AppConfig::global_mut(cx).process_cfg.mode = mode;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                         p.update(cx, |_, cx| {
                             cx.notify();
                         });

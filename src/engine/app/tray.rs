@@ -1,4 +1,9 @@
-use crate::core::app::prelude::*;
+use anyhow::Context;
+use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem}};
+use tracing::instrument;
+use tray_icon::TrayIcon;
+use crate::engine::utils;
+
 
 pub const ID_QUIT: &str = "Quit";
 pub const ID_SETTING: &str = "Setting";

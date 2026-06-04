@@ -1,13 +1,33 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-
+use anyhow::Context;
+use arc_swap::ArcSwap;
 use parking_lot::Mutex;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use tracing::instrument;
+use tray_icon::menu::MenuEvent;
+use windows::Win32::{
+    Foundation::POINT,
+    Graphics::DirectWrite::DWRITE_TEXT_METRICS,
+    UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOW},
+};
+use windows_core::{HSTRING, w};
+use winit::{
+    application::ApplicationHandler,
+    dpi::PhysicalSize,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow},
+    window::WindowId,
+};
 
 use crate::{
-    common::app_config::{DisplayStyle, PolicyMode, RenderingQuality},
-    core::app::{
-        pos_tracking::{ControlMessage, PositionController, spawn_position_thread},
-        prelude::*,
+    common::{self, AppConfig, DisplayStyle, PolicyMode, RenderingQuality, WindowRole},
+    engine::{
+        AppCore, ControlMessage, InputCapability, InputMode, PositionController, ShowState, VirtualScreen, app::tray, spawn_position_thread, utils
     },
+    run,
+    ui,
 };
 
 #[derive(Debug, Clone)]
@@ -21,7 +41,6 @@ pub struct AppState {
     pub shared: Arc<SharedState>,
     pub cap: InputCapability,
     pub mode: InputMode<'static>,
-    pub currently_visible: bool,
     pub show_state: ShowState,
     pub refresh_requested: bool,
 }
@@ -53,7 +72,6 @@ impl Default for Controller {
                 shared: AppState::new_shared(),
                 cap: InputCapability::default(),
                 mode: InputMode::default(),
-                currently_visible: false,
                 show_state: ShowState::Hidden,
                 refresh_requested: false,
             },
@@ -187,7 +205,7 @@ impl Controller {
             Message::ConfigUpdated => {
                 tracing::info!("External configuration update detected");
                 let old_role = core.cfg.load().active_role;
-                let new_cfg = config::load_config();
+                let new_cfg = common::load_config();
                 config_update(self.cfg.clone(), &new_cfg, core, &self.state)
                     .context("Failed to apply updated configuration")?;
 
@@ -495,7 +513,7 @@ fn wait_tray_event(el: &ActiveEventLoop) {
                 restart_application(false);
             }
             tray::ID_SETTING => {
-                let _ = ui::spawn::spawn_settings_ui();
+                let _ = ui::spawn_settings_ui();
             }
             _ => {}
         }
@@ -533,6 +551,7 @@ fn apply_startup_changed(new_cfg: &AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[instrument]
 fn restart_application(dropping_privileges: bool) {
     // 自らの実行ファイルパスを取得
     let exe_path = std::env::current_exe().expect("Failed to get current executable path");

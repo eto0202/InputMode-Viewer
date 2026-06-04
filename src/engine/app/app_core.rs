@@ -1,11 +1,21 @@
-use arc_swap::ArcSwap;
-use winit::dpi::PhysicalPosition;
+use anyhow::Context;
+use arc_swap::{ArcSwap, Guard};
+use std::sync::Arc;
+use tracing::instrument;
+use tray_icon::TrayIcon;
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    event_loop::ActiveEventLoop,
+};
 
-use crate::core::app::{calc::VirtualScreen, prelude::*};
+use crate::{
+    common::{AppConfig, WindowRole, WindowStyle},
+    engine::{DCompRenderer, InputMode, MainWindow, VirtualScreen, app::tray, utils},
+};
 
 pub struct AppCore {
     pub cfg: Arc<ArcSwap<AppConfig>>,
-    pub tray_icon: TrayIcon,
+    pub _tray_icon: TrayIcon,
     pub mw: MainWindow,
     pub renderer: DCompRenderer,
 }
@@ -34,7 +44,7 @@ impl AppCore {
             .context("Failed to create MainWindow instance")?;
         tracing::info!(?role, ?p_pos, ?p_size, "MainWindow created successfully");
 
-        win_style::set_window_style(mw.hwnd)
+        utils::set_window_style(mw.hwnd)
             .with_context(|| format!("Failed to apply Win32 styles to HWND: {:?}", mw.hwnd))?;
         tracing::debug!("Applied Win32 window styles (transparency, click-through, etc.)");
 
@@ -51,7 +61,12 @@ impl AppCore {
         let tray_icon = tray::tray_icon(bytes).context("Failed to initialize system tray icon")?;
         tracing::debug!("System tray icon initialized");
 
-        Ok(Self { cfg, tray_icon, mw, renderer })
+        Ok(Self {
+            cfg,
+            _tray_icon: tray_icon,
+            mw,
+            renderer,
+        })
     }
 
     // モードが変化した時に、ウィンドウサイズを再計算

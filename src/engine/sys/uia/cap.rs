@@ -1,13 +1,4 @@
-use crate::{
-    core::{
-        app::controller::Message,
-        sys::{
-            hooks::AppEvent,
-            uia::{com, init::uia_init},
-        },
-    },
-    guard_res,
-};
+
 use anyhow::Context;
 use std::sync::mpsc;
 use std::thread;
@@ -19,6 +10,8 @@ use windows::{
     core::Interface,
 };
 use winit::event_loop::EventLoopProxy;
+
+use crate::{engine::{AppEvent, Message, sys::uia}, guard_res};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum InputCapability {
@@ -39,7 +32,7 @@ impl InputCapability {
 
 pub fn cap_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
-        let _guard = com::ComGuard::new(COINIT_MULTITHREADED);
+        let _guard = uia::ComGuard::new(COINIT_MULTITHREADED);
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_cap_monitor(&proxy, &rx) {
@@ -53,7 +46,7 @@ fn run_cap_monitor(
     proxy: &EventLoopProxy<Message>,
     rx: &mpsc::Receiver<AppEvent>,
 ) -> anyhow::Result<()> {
-    let (uia, cache_req) = uia_init().context("Failed to initialize UIA")?;
+    let (uia, cache_req) = uia::uia_init().context("Failed to initialize UIA")?;
     let mut cap = InputCapability::new();
     let mut processed = std::time::Instant::now();
 

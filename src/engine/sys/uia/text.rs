@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 
-use crate::common::app_config::TextFormat;
+use crate::common::TextFormat;
+
+
 
 // windows 11 のタスクバーで使われているのは Segoe Fluent Icons
 // 日本語

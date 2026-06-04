@@ -1,4 +1,9 @@
-use crate::ui::prelude::*;
+use gpui::*;
+use gpui_component::{
+    Disableable, checkbox::Checkbox, h_flex, input::{InputState, NumberInput}, v_flex
+};
+
+use crate::common::{self, AppConfig, WindowRole};
 
 pub fn auto_hide(
     text_color: Hsla,
@@ -21,7 +26,7 @@ pub fn auto_hide(
                 }
             }
 
-            config::request_config_save(AppConfig::global(cx).clone());
+            common::request_config_save(AppConfig::global(cx).clone());
         });
 
     let number_input = NumberInput::new(&number_input)

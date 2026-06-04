@@ -1,10 +1,4 @@
-use crate::core::{
-    app::controller::Message,
-    sys::{
-        hooks::AppEvent,
-        uia::{com, init::uia_init, text::*, *},
-    },
-};
+
 use anyhow::Context;
 use std::{sync::*, thread};
 use windows::Win32::{
@@ -13,9 +7,11 @@ use windows::Win32::{
 };
 use winit::event_loop::EventLoopProxy;
 
+use crate::engine::{AppEvent, InputMode, Message, sys::uia};
+
 pub fn mode_thread(proxy: EventLoopProxy<Message>, rx: mpsc::Receiver<AppEvent>) {
     thread::spawn(move || {
-        let _guard = com::ComGuard::new(COINIT_MULTITHREADED);
+        let _guard = uia::ComGuard::new(COINIT_MULTITHREADED);
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_monitor_loop(&proxy, &rx) {
@@ -86,7 +82,7 @@ struct ImeMonitor {
 
 impl ImeMonitor {
     fn new() -> anyhow::Result<Self> {
-        let (uia, cache_req) = uia_init().context("Failed to initialize UIA")?;
+        let (uia, cache_req) = uia::uia_init().context("Failed to initialize UIA")?;
 
         let (root, tray_wnd, text_block) = unsafe {
             let root = uia
@@ -137,7 +133,7 @@ impl ImeMonitor {
             uia_el.FindAllBuildCache(TreeScope_Descendants, &self.text_block, &self.cache_req)
         }?;
 
-        let el = init::find_element(&els, "InnerTextBlock")?;
+        let el = uia::find_element(&els, "InnerTextBlock")?;
         let name = unsafe { el.CachedName() }?;
 
         Ok(InputMode::from_glyph(name.to_string()))

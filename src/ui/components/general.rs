@@ -1,4 +1,9 @@
-use crate::{common::app_config::RenderingQuality, ui::prelude::*};
+use gpui::*;
+use gpui_component::setting::{SettingField, SettingItem};
+
+use crate::{common::{self, AppConfig, ConfigTheme, RenderingQuality, WindowRole}, ui::SettingsWindow};
+
+
 
 pub fn general(
     _: &mut Window,
@@ -46,7 +51,7 @@ pub fn general(
                     |cx: &App| AppConfig::global(cx).transparent,
                     |val: bool, cx: &mut App| {
                         AppConfig::global_mut(cx).transparent = val;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 ).default_value(AppConfig::default().transparent),
             )
@@ -67,7 +72,7 @@ pub fn general(
                             .parse::<RenderingQuality>()
                             .unwrap_or(RenderingQuality::Balanced);
                         AppConfig::global_mut(cx).quality = q;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().quality.as_ref().to_string()),
@@ -89,7 +94,7 @@ pub fn general(
                             .unwrap_or(ConfigTheme::System);
                         mode.theme_change(cx);
                         AppConfig::global_mut(cx).cfg_theme = mode;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().cfg_theme.as_ref().to_string()),
@@ -117,7 +122,7 @@ pub fn general(
                             .unwrap_or(WindowRole::Fixed);
                         tracing::debug!("Current Role: {:?}", role);
                         AppConfig::global_mut(cx).active_role = role;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().active_role.as_ref().to_string()),

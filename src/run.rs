@@ -1,13 +1,3 @@
-use crate::{
-    common::{app_config::AppConfig, config},
-    core::{
-        logic,
-        sys::uia::com::ComGuard,
-        utils::{self},
-    },
-    ui::settings,
-};
-
 use anyhow::Context;
 use std::path::PathBuf;
 use std::{env, process};
@@ -28,9 +18,13 @@ use windows::Win32::{
 };
 use windows_core::{BSTR, HRESULT, HSTRING, Interface, w};
 
+use crate::common::AppConfig;
+use crate::engine::ComGuard;
+use crate::{common, engine, ui};
+
 #[instrument]
 pub fn app_run() -> anyhow::Result<()> {
-    let mut cfg = config::load_config();
+    let mut cfg = common::load_config();
 
     set_startup(&cfg).context("An error occurred during startup.")?;
 
@@ -46,13 +40,13 @@ pub fn app_run() -> anyhow::Result<()> {
             .and_then(|s| s.parse::<u32>().ok());
 
         tracing::info!(parent_pid, "Launch in UI mode");
-        settings::run(parent_pid).context("Error executing the settings screen")?;
+        ui::run(parent_pid).context("Error executing the settings screen")?;
         return Ok(());
     } else {
         restart_as_admin(&mut cfg).context("Error during privilege escalation check")?;
 
         tracing::info!("Start the main logic");
-        logic::run().context("Main logic execution error")?;
+        engine::run().context("Main logic execution error")?;
     }
 
     Ok(())
@@ -269,11 +263,11 @@ fn set_settings(settings: ITaskSettings) -> anyhow::Result<()> {
 #[instrument(skip(cfg))]
 fn restart_as_admin(cfg: &mut AppConfig) -> anyhow::Result<()> {
     // 権限状態の同期と昇格チェック
-    if utils::elevated_check() {
+    if engine::elevated_check() {
         // 現在管理者なら設定を同期
         if !cfg.administrator {
             cfg.administrator = true;
-            config::save_config(cfg)
+            common::save_config(cfg)
                 .context("Failed to synchronize administrator status in config")?;
             tracing::info!("Already running as admin. Config state synchronized.");
         } else {
@@ -301,7 +295,7 @@ fn restart_as_admin(cfg: &mut AppConfig) -> anyhow::Result<()> {
                 "Elevation failed or was cancelled by user. Falling back to normal user mode."
             );
             cfg.administrator = false;
-            if let Err(e) = config::save_config(cfg) {
+            if let Err(e) = common::save_config(cfg) {
                 tracing::warn!(error = ?e, "Failed to save fallback configuration");
             }
         }

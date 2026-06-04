@@ -1,13 +1,3 @@
-use crate::{
-    common::config,
-    core::{
-        app::controller::{self},
-        sys::{
-            hooks::{self, AppEvent},
-            uia::{cap, mode},
-        },
-    },
-};
 use anyhow::Context;
 use arc_swap::ArcSwap;
 use notify::{Error, Event, EventKind, Watcher};
@@ -18,14 +8,16 @@ use std::sync::{
 use tracing::instrument;
 use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 
+use crate::{common, engine::{AppEvent, Controller, Message, sys}};
+
 #[instrument]
 pub fn run() -> anyhow::Result<()> {
     // 設定の初期ロード
-    let cfg_data = config::load_config();
+    let cfg_data = common::load_config();
     tracing::info!("Configuration loaded for main logic");
     let cfg = Arc::new(ArcSwap::from_pointee(cfg_data));
 
-    let el = EventLoop::<controller::Message>::with_user_event()
+    let el = EventLoop::<Message>::with_user_event()
         .build()
         .context("Failed to build winit EventLoop")?;
     let proxy = el.create_proxy();
@@ -33,7 +25,7 @@ pub fn run() -> anyhow::Result<()> {
     let (tx_mode, rx_mode) = mpsc::channel();
     let (tx_cap, rx_cap) = mpsc::channel();
 
-    let rx_hooks = hooks::win_hooks();
+    let rx_hooks = sys::win_hooks();
     tracing::info!("Windows event hooks initialized");
 
     set_dispatcher(rx_hooks, tx_mode, tx_cap).context("Failed to spawn event dispatcher thread")?;
@@ -42,8 +34,8 @@ pub fn run() -> anyhow::Result<()> {
     let proxy_cap = proxy.clone();
 
     // 各スレッドの起動
-    mode::mode_thread(proxy_mode, rx_mode);
-    cap::cap_thread(proxy_cap, rx_cap);
+    sys::mode_thread(proxy_mode, rx_mode);
+    sys::cap_thread(proxy_cap, rx_cap);
     tracing::info!("Sub-threads (mode, cap) spawned successfully");
 
     let proxy_watcher = proxy.clone();
@@ -51,7 +43,7 @@ pub fn run() -> anyhow::Result<()> {
         .context("Failed to initialize configuration file watcher")?;
 
     el.set_control_flow(ControlFlow::Wait);
-    let mut app = controller::Controller {
+    let mut app = Controller {
         cfg: Some(cfg),
         ..Default::default()
     };
@@ -91,9 +83,9 @@ fn set_dispatcher(
 
 #[instrument(skip(proxy))]
 fn spawn_config_watcher(
-    proxy: EventLoopProxy<controller::Message>,
+    proxy: EventLoopProxy<Message>,
 ) -> anyhow::Result<impl Watcher> {
-    let path = config::get_config_path().context("Failed to determine config file path")?;
+    let path = common::get_config_path().context("Failed to determine config file path")?;
     let parent_dir = path
         .parent()
         .context("Config path has no parent directory")?
@@ -110,7 +102,7 @@ fn spawn_config_watcher(
                 match e.kind {
                     EventKind::Modify(_) | EventKind::Create(_) => {
                         tracing::debug!("Config file change detected, sending reload signal");
-                        let _ = proxy.send_event(controller::Message::ConfigUpdated);
+                        let _ = proxy.send_event(Message::ConfigUpdated);
                     }
                     _ => {}
                 }

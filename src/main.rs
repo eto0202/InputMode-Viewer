@@ -1,10 +1,11 @@
 #![windows_subsystem = "windows"]
+mod common;
+mod engine;
+mod macros;
+mod run;
+mod ui;
 use anyhow::Context;
 use directories::ProjectDirs;
-use input_mode_viewer::{
-    core::{app::pos_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue},
-    run::app_run,
-};
 use windows::Win32::{
     System::WinRT::RO_INIT_SINGLETHREADED,
     UI::{
@@ -45,14 +46,14 @@ fn main() -> anyhow::Result<()> {
     }
     // COMの初期化 (WinRT用)
     let _guard =
-        RoGuard::new(RO_INIT_SINGLETHREADED).context("Failed to initialize COM (WinRT)")?;
+        engine::RoGuard::new(RO_INIT_SINGLETHREADED).context("Failed to initialize COM (WinRT)")?;
     // DispatcherQueueの初期化
     let _queue_controller =
-        init_dispatcher_queue().context("Failed to initialize DispatcherQueue")?;
+        engine::init_dispatcher_queue().context("Failed to initialize DispatcherQueue")?;
 
     tracing::info!("Environment initialized successfully");
 
-    if let Err(e) = app_run() {
+    if let Err(e) = run::app_run() {
         tracing::error!(error = ?e, "Application terminated with error:\n{:#?}", e);
 
         // ユーザー通知用メッセージ

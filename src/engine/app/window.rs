@@ -1,4 +1,24 @@
-use crate::core::app::prelude::*;
+use std::sync::Arc;
+
+use anyhow::Context;
+use tracing::instrument;
+use windows::Win32::{
+    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
+    System::LibraryLoader::GetModuleHandleW,
+    UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, RegisterClassExW, WINDOW_EX_STYLE, WINDOW_STYLE,
+        WNDCLASSEXW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP, WS_VISIBLE,
+    },
+};
+use windows_core::{PCWSTR, w};
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    event_loop::ActiveEventLoop,
+    platform::windows::WindowAttributesExtWindows,
+    window::{Window, WindowAttributes},
+};
+
+use crate::{common::WindowRole, engine::utils};
 
 pub struct MainWindow {
     pub window: Arc<Window>,
@@ -47,8 +67,7 @@ impl MainWindow {
             .set_cursor_hittest(false)
             .context("Failed to disable cursor hit-testing (click-through)")?;
 
-        let hwnd =
-            win_style::get_hwnd(&window).context("Failed to retrieve HWND from winit window")?;
+        let hwnd = utils::get_hwnd(&window).context("Failed to retrieve HWND from winit window")?;
 
         tracing::info!(?hwnd, "MainWindow initialized successfully");
         Ok(Self { window, hwnd, role })

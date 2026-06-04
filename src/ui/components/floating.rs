@@ -1,4 +1,16 @@
-use crate::{common::app_config::TextFormat, ui::prelude::*};
+use crate::{
+    common::{
+        self, AppConfig, AutoHide, D2d1ColorExt, DisplayStyle, GpuiColorExt, TextFormat, WindowRole,
+    },
+    ui::{ColorPickerSettingItem, SettingsWindow, components},
+};
+use gpui::*;
+use gpui_component::{
+    ActiveTheme,
+    color_picker::{ColorPickerEvent, ColorPickerState},
+    input::{InputEvent, InputState, NumberInputEvent, StepAction},
+    setting::{NumberFieldOptions, SettingField, SettingItem},
+};
 
 pub struct Floating {
     pub bg_color: Entity<ColorPickerState>,
@@ -10,6 +22,7 @@ pub struct Floating {
     pub number_input_value: f32,
     pub number_input: Entity<InputState>,
 
+    #[allow(dead_code)]
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -37,7 +50,7 @@ impl Floating {
                     AppConfig::global_mut(cx).floating.style.bg_color =
                         color.unwrap_or_default().to_d2d1_color();
                     this.floating.bg_selected_color = *color;
-                    config::request_config_save(AppConfig::global(cx).clone());
+                    common::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe(&font_color, |this, _, ev, cx| match ev {
@@ -45,7 +58,7 @@ impl Floating {
                     AppConfig::global_mut(cx).floating.style.font_color =
                         color.unwrap_or_default().to_d2d1_color();
                     this.floating.font_selected_color = *color;
-                    config::request_config_save(AppConfig::global(cx).clone());
+                    common::request_config_save(AppConfig::global(cx).clone());
                 }
             }),
             cx.subscribe_in(
@@ -60,7 +73,7 @@ impl Floating {
                         this.floating.number_input_value = value;
 
                         AppConfig::global_mut(cx).floating.auto_hide.time = value;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     }
                     InputEvent::Focus => {}
                     _ => {}
@@ -77,7 +90,7 @@ impl Floating {
 
                             AppConfig::global_mut(cx).floating.auto_hide.time =
                                 this.floating.number_input_value;
-                            config::request_config_save(AppConfig::global(cx).clone());
+                            common::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -92,7 +105,7 @@ impl Floating {
 
                             AppConfig::global_mut(cx).floating.auto_hide.time =
                                 this.floating.number_input_value;
-                            config::request_config_save(AppConfig::global(cx).clone());
+                            common::request_config_save(AppConfig::global(cx).clone());
 
                             state.update(cx, |input, cx| {
                                 input.set_value(
@@ -133,7 +146,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.style.font_size.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.font_size = val as f32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.font_size),
@@ -169,7 +182,7 @@ impl Floating {
                             .parse::<TextFormat>()
                             .unwrap_or(TextFormat::Full);
                         AppConfig::global_mut(cx).floating.style.text_format = style;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.text_format.as_ref().to_string()),
@@ -195,7 +208,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.style.padding.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.padding = val as f32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.padding),
@@ -214,7 +227,7 @@ impl Floating {
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.style.opacity = (val / 100.0) as f32;
 
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.style.opacity * 100.0),
@@ -232,7 +245,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.offset.x.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.offset.x = val as i32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.offset.x),
@@ -250,7 +263,7 @@ impl Floating {
                     |cx: &App| AppConfig::global(cx).floating.offset.y.into(),
                     |val: f64, cx: &mut App| {
                         AppConfig::global_mut(cx).floating.offset.y = val as i32;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.offset.y),
@@ -277,7 +290,7 @@ impl Floating {
                             .parse::<DisplayStyle>()
                             .unwrap_or(DisplayStyle::Smart(AutoHide::default()));
                         AppConfig::global_mut(cx).floating.display_style = s;
-                        config::request_config_save(AppConfig::global(cx).clone());
+                        common::request_config_save(AppConfig::global(cx).clone());
                     },
                 )
                 .default_value(AppConfig::default().floating.display_style.as_ref().to_string()),
@@ -289,7 +302,7 @@ impl Floating {
                 let text_color = cx.theme().muted_foreground;
                 let border_color = cx.theme().border;
 
-                auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), app_config::WindowRole::Floating)
+                components::auto_hide(text_color, border_color, is_enable, is_disabled, number_input.clone(), WindowRole::Floating)
             })).description("Set the time (in seconds) before the window hides automatically. (Default 3)\nNote: This setting only applies when Visibility Mode is set to \"Smart\"."),
         ]
     }
