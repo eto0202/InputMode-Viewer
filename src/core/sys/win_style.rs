@@ -5,22 +5,9 @@ use windows::Win32::{
     Graphics::Dwm::{
         DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
     },
-    System::LibraryLoader::GetModuleHandleW,
     UI::{Controls::MARGINS, WindowsAndMessaging::*},
 };
-use windows_core::{BOOL, PCWSTR, w};
-
-// ウィンドウの位置指定
-pub fn set_window_position(hwnd: HWND, x: i32, y: i32, cx: i32, cy: i32) -> anyhow::Result<()> {
-    // SWP_NOACTIVATE: フォーカスを奪わない
-    // SWP_NOSIZE: サイズは変えない
-    // SWP_ASYNCWINDOWPOS: スレッドをブロックせずに座標を送る
-    // SWP_NOCOPYBITS: 描画バッファのコピーをスキップ（DCompなので不要）
-    let uflags = SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOREDRAW;
-
-    unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, cx, cy, uflags) }?;
-    Ok(())
-}
+use windows_core::BOOL;
 
 // 指定されたwindowの最前面固定を設定
 pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> anyhow::Result<()> {
@@ -38,46 +25,6 @@ pub fn set_always_on_top(hwnd: HWND, enabled: bool) -> anyhow::Result<()> {
     unsafe { SetWindowPos(hwnd, Some(insert_after), 0, 0, 0, 0, uflags) }?;
 
     Ok(())
-}
-
-unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-}
-
-pub fn create_dummy_parent() -> Result<HWND> {
-    unsafe {
-        let instance = GetModuleHandleW(None)?;
-        let class_name = w!("DummyParentClass");
-
-        // ウィンドウクラスの登録
-        let wnd_class = WNDCLASSEXW {
-            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-            lpfnWndProc: Some(wndproc),
-            hInstance: instance.into(),
-            lpszClassName: PCWSTR(class_name.as_ptr()),
-            ..Default::default()
-        };
-
-        RegisterClassExW(&wnd_class);
-
-        // バックグラウンドプロセスにするためにはWS_VISIBLEが必要っぽい
-        let hwnd = CreateWindowExW(
-            WINDOW_EX_STYLE(WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0),
-            class_name,
-            w!(""),
-            WINDOW_STYLE(WS_POPUP.0 | WS_VISIBLE.0),
-            0,
-            0,
-            0,
-            0,
-            None,
-            None,
-            Some(HINSTANCE(instance.0)),
-            None,
-        )?;
-
-        Ok(hwnd)
-    }
 }
 
 pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
@@ -135,28 +82,6 @@ pub fn set_window_style(hwnd: HWND) -> anyhow::Result<()> {
             SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOREDRAW | SWP_FRAMECHANGED,
         )
     }?;
-
-    Ok(())
-}
-
-// ウィンドウの透明度
-pub fn set_window_opacity(hwnd: HWND, opacity: u8) -> anyhow::Result<()> {
-    // opacity: 0 (透明) - 255 (不透明)
-    unsafe { SetLayeredWindowAttributes(hwnd, COLORREF(0), opacity, LWA_ALPHA) }?;
-    Ok(())
-}
-
-// WS_POPUP に書き換え、枠線やタイトルバーに関連するフラグをすべて除去
-pub fn set_window_popup(hwnd: HWND) -> anyhow::Result<()> {
-    let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) };
-
-    let new_style = (style as u32
-        & !(WS_OVERLAPPED | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX).0)
-        | WS_POPUP.0;
-
-    unsafe {
-        SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
-    };
 
     Ok(())
 }

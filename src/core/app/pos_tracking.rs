@@ -1,6 +1,7 @@
 use crate::core::app::prelude::*;
 
 // 通知用メッセージ
+#[derive(Debug)]
 pub enum ControlMessage {
     ResetPosition,
     Terminate,
@@ -14,7 +15,9 @@ pub struct PositionController {
 
 impl PositionController {
     pub fn send(&self, msg: ControlMessage) -> anyhow::Result<()> {
-        self.tx.send(msg)?;
+        self.tx
+            .send(msg)
+            .context("Failed to ControlMessage to position thread")?;
         unsafe {
             SetEvent(self.wake_event.0)?;
         }
@@ -46,7 +49,9 @@ pub fn spawn_position_thread(
     let renderer = core.renderer.get_controller();
 
     // 自動リセットイベント
-    let h = unsafe { CreateEventW(None, false, false, None)? };
+    let h = unsafe {
+        CreateEventW(None, false, false, None).context("Failed to create thread wake event")?
+    };
     let wake_event = SendHandle(h);
 
     // スレッドに渡すためにコピー
@@ -56,7 +61,8 @@ pub fn spawn_position_thread(
     let (tx, rx) = mpsc::channel::<ControlMessage>();
 
     std::thread::spawn(move || {
-        let _guard = RoGuard::new(RO_INIT_MULTITHREADED);
+        let _guard = RoGuard::new(RO_INIT_MULTITHREADED)
+            .expect("Failed to initialize COM for position thread");
 
         // 自スレッドのハンドルを取得し優先度を上げる
         unsafe {
@@ -64,9 +70,11 @@ pub fn spawn_position_thread(
             // THREAD_PRIORITY_HIGHEST: 標準より2段階高い
             // THREAD_PRIORITY_ABOVE_NORMAL: 標準より1段階高い
             if let Err(e) = SetThreadPriority(thread_handle, THREAD_PRIORITY_HIGHEST) {
-                tracing::warn!("Failed to set thread priority: {:?}", e);
+                tracing::warn!(error = ?e, "Could not elevate position thread priority. Performance might be affected.");
             }
         }
+
+        tracing::info!("Position tracking thread started");
 
         // エラーが起きている間はリトライし続ける
         while let Err(e) = run_positon_thread(
@@ -76,9 +84,10 @@ pub fn spawn_position_thread(
             &rx,
             thread_wake_event,
         ) {
-            tracing::warn!("Position thread Error: {:?}. Restarting...", e);
+            tracing::error!(error = ?e, "Position thread encountered a critical error. Restarting in 3s...: {:#?}", e);
             std::thread::sleep(Duration::from_secs(3));
         }
+        tracing::info!("Position tracking thread terminated gracefully");
     });
 
     Ok(PositionController { tx, wake_event })
@@ -96,7 +105,8 @@ fn run_positon_thread(
     const INTERVAL_240HZ: i64 = -41_666;
     const INTERVAL_480HZ: i64 = -20_833;
 
-    let timer = WaitableTimer::new().context("Faild to create timer")?;
+    let timer =
+        WaitableTimer::new().context("Initialization failed: High-res timer is unavailable")?;
     let mut is_tracking = false;
     let mut last_move_time = Instant::now();
     let mut last_pt = POINT::default();
@@ -105,7 +115,9 @@ fn run_positon_thread(
     let handles_idle = [wake_event.0];
     let handles_tracking = [wake_event.0, timer.handle];
 
-    register_rawinput_devices()?;
+    register_rawinput_devices()
+        .context("Failed to register Raw Input devices for mouse tracking")?;
+    tracing::debug!("Raw Input devices registered");
 
     // 初回起動時に一度だけ位置合わせ
     let init_cfg = cfg_swap.load();
@@ -122,13 +134,15 @@ fn run_positon_thread(
         while let Ok(ctrl) = rx.try_recv() {
             match ctrl {
                 ControlMessage::ResetPosition | ControlMessage::Refresh => {
-                    tracing::info!("Position reset triggered by config change.");
+                    tracing::info!(reason = ?ctrl, "Position reset/refresh triggered");
                     // アニメーションが動いているプロパティに対して直接値をセットすると
                     // 現在実行中のアニメーションが強制的に切断され、静的な値が優先される
                     // renderer の mouse_tracking を呼び出し、PropertySet の値は更新されているが
                     // sprite_visual の Offset プロパティは固定モードの時にアニメーションとの接続が切れたまま
                     // PropertySet と Offset を繋ぐ ExpressionAnimation を再接続させる
-                    renderer.mouse_expr_start()?;
+                    renderer
+                        .mouse_expr_start()
+                        .context("Failed to restart mouse expression animation")?;
 
                     let mut current_pt = POINT::default();
                     unsafe {
@@ -138,43 +152,31 @@ fn run_positon_thread(
 
                     is_tracking = true;
                 }
-                ControlMessage::Terminate => return Ok(()),
+                ControlMessage::Terminate => {
+                    tracing::info!("Termination message received. Closing position thread.");
+                    return Ok(());
+                }
             }
         }
 
-        // 待機処理
-        if !displayed {
-            is_tracking = false;
-            unsafe {
-                MsgWaitForMultipleObjectsEx(
-                    Some(&handles_idle),
-                    INFINITE,
-                    QS_POSTMESSAGE,
-                    MWMO_INPUTAVAILABLE,
-                );
-            }
-            // 起きたらWM_INPUTなどを一掃
-            let mut msg = MSG::default();
-            unsafe { while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {} }
-            continue;
+        let (handles, timeout, wake_mask): (&[HANDLE], u32, QUEUE_STATUS_FLAGS) = if !displayed {
+            // 非表示: 設定変更 (wake_event) のみを待ち、マウス (RAWINPUT) は無視
+            (&handles_idle, INFINITE, QS_POSTMESSAGE)
         } else if !is_tracking {
-            unsafe {
-                MsgWaitForMultipleObjectsEx(
-                    Some(&handles_idle),
-                    INFINITE,
-                    QS_RAWINPUT | QS_POSTMESSAGE,
-                    MWMO_INPUTAVAILABLE,
-                );
-            }
+            // 表示中・静止: 設定変更 or マウス移動を待つ
+            (&handles_idle, INFINITE, QS_RAWINPUT | QS_POSTMESSAGE)
         } else {
-            unsafe {
-                MsgWaitForMultipleObjectsEx(
-                    Some(&handles_tracking),
-                    100,
-                    QS_POSTMESSAGE,
-                    MWMO_INPUTAVAILABLE,
-                );
-            }
+            // 表示中・追従: 設定変更 or タイマー (handles_trackingに含まれる) を待つ
+            (&handles_tracking, 100, QS_POSTMESSAGE)
+        };
+
+        let wait_res = unsafe {
+            MsgWaitForMultipleObjectsEx(Some(handles), timeout, wake_mask, MWMO_INPUTAVAILABLE)
+        };
+
+        if wait_res.0 == WAIT_FAILED.0 {
+            return Err(anyhow::anyhow!(windows::core::Error::from_thread()))
+                .context("MsgWaitForMultipleObjectsEx failed in position loop");
         }
 
         // メッセージの一掃
@@ -192,6 +194,10 @@ fn run_positon_thread(
         }
 
         if !displayed {
+            if is_tracking {
+                tracing::debug!("UI hidden: Stopping mouse tracking.");
+                is_tracking = false;
+            }
             continue;
         }
 
@@ -210,9 +216,13 @@ fn run_positon_thread(
             update_position(&shared, &cfg, &renderer, current_pt)?;
             last_pt = current_pt;
             last_move_time = Instant::now();
-            is_tracking = true;
+            if !is_tracking {
+                tracing::debug!("Mouse movement detected. Entering tracking state.");
+                is_tracking = true;
+            }
         } else if is_tracking && last_move_time.elapsed() > Duration::from_secs(2) {
             // 2秒間変化がなければ追従終了
+            tracing::debug!("Mouse idle for 2s. Entering low-power/wait state.");
             is_tracking = false;
         }
 
@@ -245,10 +255,12 @@ fn update_position(
 
     match cfg.active_role {
         WindowRole::Floating => {
-            renderer.mouse_tracking(
-                current_pt.x - v_screen.x + cfg.floating.offset.x,
-                current_pt.y - v_screen.y + cfg.floating.offset.y,
-            )?;
+            renderer
+                .mouse_tracking(
+                    current_pt.x - v_screen.x + cfg.floating.offset.x,
+                    current_pt.y - v_screen.y + cfg.floating.offset.y,
+                )
+                .context("Composition: Failed to update mouse_tracking property")?;
             {
                 let mut lock = shared.floating.lock();
                 *lock = current_pt;
@@ -257,12 +269,15 @@ fn update_position(
         WindowRole::Fixed => {
             // Fixedモードの計算
             // めんどくさいので毎回座標を取得
-            let (info, s) = calc::monitor_info(current_pt)?;
+            let (info, s) = calc::monitor_info(current_pt)
+                .context("Win32: Failed to get monitor info for fixed position")?;
             let m = cfg.fixed.margin;
             let p = cfg.fixed.style.padding;
             // **metrics: DWRITE_TEXT_METRICS
             let pos = calc::fixed_position(**metrics, &cfg.fixed.pos, m, p, info, s)?;
-            renderer.set_position((pos.x - v_screen.x) as f32, (pos.y - v_screen.y) as f32)?;
+            renderer
+                .set_position((pos.x - v_screen.x) as f32, (pos.y - v_screen.y) as f32)
+                .context("Composition: Failed to update fixed position property")?;
             {
                 let mut lock = shared.fixed.lock();
                 *lock = pos;
@@ -343,7 +358,7 @@ struct WaitableTimer {
 }
 
 impl WaitableTimer {
-    fn new() -> Option<Self> {
+    fn new() -> anyhow::Result<Self> {
         let handle = unsafe {
             CreateWaitableTimerExW(
                 None,
@@ -351,20 +366,20 @@ impl WaitableTimer {
                 CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                 TIMER_ALL_ACCESS.0,
             )
-        };
-
-        match handle {
-            Err(e) => {
-                tracing::warn!("Failed to get WaitableTimer HANDLE: {}", e);
-                None
-            }
-            Ok(handle) => Some(Self { handle }),
         }
+        .context("Failed to create high-resolution waitable timer")?;
+
+        if handle.is_invalid() {
+            anyhow::bail!("CreateWaitableTimerExW returned an invalid handle");
+        }
+
+        Ok(Self { handle })
     }
 
-    fn set_timer(&self, interval: i64) -> windows_core::Result<()> {
+    fn set_timer(&self, interval: i64) -> anyhow::Result<()> {
         unsafe {
-            SetWaitableTimer(self.handle, &interval, 0, None, None, false)?;
+            SetWaitableTimer(self.handle, &interval, 0, None, None, false)
+                .context("Failed to set waitable timer")?;
         }
         Ok(())
     }

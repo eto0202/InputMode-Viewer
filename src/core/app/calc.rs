@@ -1,3 +1,5 @@
+use windows::Win32::UI::WindowsAndMessaging::{SM_CXSCREEN, SM_CYSCREEN};
+
 use crate::{common::app_config::WindowPos, core::app::prelude::*};
 
 // 座標計算
@@ -62,23 +64,33 @@ pub fn monitor_info(pt: POINT) -> anyhow::Result<(MONITORINFO, f64)> {
         ..Default::default()
     };
 
-    // モニターのDPIスケールを取得
-    let mut dpi_x = 0;
-    let mut dpi_y = 0;
-
-    let s = unsafe {
+    unsafe {
         let h = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        if !GetMonitorInfoW(h, &mut info).as_bool() {
-            anyhow::bail!("Failed to get monitor info");
+        if h.is_invalid() {
+            anyhow::bail!(
+                "Failed to get monitor handle from point ({}, {})",
+                pt.x,
+                pt.y
+            );
         }
-        if GetDpiForMonitor(h, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y).is_ok() {
+
+        GetMonitorInfoW(h, &mut info)
+            .ok()
+            .context("Failed to get monitor information")?;
+
+        // モニターのDPIスケールを取得
+        let mut dpi_x = 0;
+        let mut dpi_y = 0;
+
+        let scale = if GetDpiForMonitor(h, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y).is_ok() {
             dpi_x as f64 / 96.0
         } else {
+            tracing::warn!("Failed to get DPI for monitor, falling back to 1.0");
             1.0
-        }
-    };
+        };
 
-    Ok((info, s))
+        Ok((info, scale))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -90,19 +102,50 @@ pub struct VirtualScreen {
 }
 impl VirtualScreen {
     pub fn new() -> Self {
-        VirtualScreen::default()
+        unsafe {
+            // 仮想画面全体のサイズを取得
+            let mut x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            let mut y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            let mut cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            let mut cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+            // 幅や高さが0ならプライマリモニターの値で上書き
+            if cx == 0 || cy == 0 {
+                tracing::warn!(
+                    "Virtual screen metrics are invalid (cx: {}, cy: {}). Falling back to primary monitor.",
+                    cx,
+                    cy
+                );
+                x = 0;
+                y = 0;
+                cx = GetSystemMetrics(SM_CXSCREEN);
+                cy = GetSystemMetrics(SM_CYSCREEN);
+            }
+
+            // それでも0なら最低限の値を設定
+            if cx == 0 || cy == 0 {
+                tracing::error!(
+                    "Primary monitor metrics also failed. Using 1920x1080 as a hard fallback."
+                );
+                // フルHD
+                cx = 1920;
+                cy = 1080;
+            }
+
+            let result = Self { x, y, cx, cy };
+
+            tracing::info!(
+                virtual_screen = ?result,
+                "Virtual screen metrics loaded"
+            );
+
+            result
+        }
     }
 }
 impl Default for VirtualScreen {
     fn default() -> Self {
-        unsafe {
-            Self {
-                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
-                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
-                cx: GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                cy: GetSystemMetrics(SM_CYVIRTUALSCREEN),
-            }
-        }
+        Self::new()
     }
 }
 
@@ -155,5 +198,14 @@ pub fn fixed_position(
         }
     };
 
-    Ok(POINT { x, y })
+    let result = POINT { x, y };
+
+    tracing::debug!(
+        ?pos,
+        calculated_point = ?result,
+        monitor_rect = ?info.rcWork,
+        "Fixed position calculated"
+    );
+
+    Ok(result)
 }

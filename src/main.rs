@@ -2,7 +2,7 @@
 use anyhow::Context;
 use directories::ProjectDirs;
 use input_mode_viewer::{
-    core::{app::mouse_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue},
+    core::{app::pos_tracking::RoGuard, sys::new_renderer::init_dispatcher_queue},
     run::app_run,
 };
 use windows::Win32::{
@@ -28,6 +28,7 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 // positon_threadがエラー落ちした時、core.renderer.get_controller() から作り直した新しいコントローラーを渡す
 // メインスレッドも自動復旧するように
 // リスタート時や復旧時に通知を出す
+// アプリアイコンの設定
 
 fn main() -> anyhow::Result<()> {
     let _log_guard = init_logger()?;
@@ -35,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         os = std::env::consts::OS,
-        "Application starting..."
+        "--- Application starting... ---"
     );
     set_panic_hook();
 

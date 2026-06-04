@@ -16,16 +16,45 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
 };
 
-// メモリ上のバイト列から画像をデコードしアイコンを生成
-// アプリケーション内に画像が保存される
-pub fn load_icon(to_include_bytes: &[u8]) -> tray_icon::Icon {
-    let img = image::load_from_memory(to_include_bytes)
-        .unwrap()
+pub struct RawIcon {
+    pub rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+// メモリ上のバイナリからRGBAピクセルデータにデコード
+#[instrument(skip(bytes))]
+pub fn decode_to_rgba(bytes: &[u8]) -> anyhow::Result<RawIcon> {
+    let img = image::load_from_memory(bytes)
+        .context(
+            "Failed to decode image from memory. Format may be unsupported or data corrupted.",
+        )?
         .into_rgba8();
+
     let (width, height) = img.dimensions();
     let rgba = img.into_raw();
 
-    tray_icon::Icon::from_rgba(rgba, width, height).unwrap()
+    tracing::debug!(width, height, "Image decoded to RGBA pixels successfully");
+    Ok(RawIcon { rgba, width, height })
+}
+
+// tray_icon クレート用のアイコン
+pub fn to_tray_icon(raw: RawIcon) -> anyhow::Result<tray_icon::Icon> {
+    tray_icon::Icon::from_rgba(raw.rgba, raw.width, raw.height).with_context(|| {
+        format!(
+            "Failed to create tray_icon::Icon ({}x{})",
+            raw.width, raw.height
+        )
+    })
+}
+// winit クレート用のアイコン
+pub fn to_winit_icon(raw: RawIcon) -> anyhow::Result<winit::window::Icon> {
+    winit::window::Icon::from_rgba(raw.rgba, raw.width, raw.height).with_context(|| {
+        format!(
+            "Failed to create winit::window::Icon ({}x{})",
+            raw.width, raw.height
+        )
+    })
 }
 
 #[instrument]

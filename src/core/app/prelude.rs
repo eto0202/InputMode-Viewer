@@ -40,9 +40,12 @@ pub use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
 };
 pub use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM},
+    Foundation::{CloseHandle, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM, *},
     Graphics::{
         DirectWrite::DWRITE_TEXT_METRICS,
+        Dwm::{
+            DWMWA_TRANSITIONS_FORCEDISABLED, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+        },
         Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
     },
     System::{
@@ -55,6 +58,7 @@ pub use windows::Win32::{
         WinRT::{RO_INIT_MULTITHREADED, RO_INIT_TYPE, RoInitialize, RoUninitialize},
     },
     UI::{
+        Controls::MARGINS,
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
         Input::{RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RegisterRawInputDevices},
         Shell::ShellExecuteW,
@@ -63,10 +67,11 @@ pub use windows::Win32::{
             HWND_MESSAGE, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
             PeekMessageW, QS_POSTMESSAGE, QS_RAWINPUT, RegisterClassExW, SM_CXVIRTUALSCREEN,
             SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_SHOW, WINDOW_EX_STYLE,
-            WINDOW_STYLE, WM_INPUT, WNDCLASSEXW,
+            WINDOW_STYLE, WM_INPUT, WNDCLASSEXW, *,
         },
     },
 };
+
 pub use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position},
@@ -76,4 +81,5 @@ pub use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-pub use windows_core::{HSTRING, w};
+pub use tracing::instrument;
+pub use windows_core::{BOOL, HSTRING, PCWSTR, w};

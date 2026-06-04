@@ -127,7 +127,7 @@ impl DCompRenderer {
         style: &WindowStyle,
         scale: f64,
         transparent: bool,
-    ) -> anyhow::Result<(Self, f32, f32)> {
+    ) -> anyhow::Result<Self> {
         // 基盤
         let (d3d_device, dxgi_device, dxgi_factory, _, d2d_context) = create_graphics_foundation()?;
         tracing::info!("Graphics Foundation (D3D, DXGI, D2D) OK");
@@ -199,7 +199,7 @@ impl DCompRenderer {
             mouse_expr,
         };
 
-        Ok((renderer, lw, lh))
+        Ok(renderer)
     }
 
     // 毎フレーム、または再描画が必要な時に呼ばれる関数
